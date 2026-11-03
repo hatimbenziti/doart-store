@@ -1,0 +1,6 @@
+{
+  "name": "DoArt Store - Marque Marocaine de Vêtements",
+  "description": "Boutique de mode marocaine contemporaine et raffinée. Vêtements haut de gamme, livraison partout au Maroc et paiement à la livraison (COD) avec confirmation WhatsApp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
