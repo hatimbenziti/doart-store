@@ -438,25 +438,66 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({
 
           {/* Section 2: Galerie Photos */}
           <div className="space-y-4">
-            <h4 className="text-xs uppercase tracking-widest font-bold text-[#CF7644] border-b pb-1">
-              2. Photographies du Produit
-            </h4>
+            <div className="flex items-center justify-between border-b pb-1">
+              <h4 className="text-xs uppercase tracking-widest font-bold text-[#CF7644]">
+                2. Photographies du Produit
+              </h4>
+              <span className="text-[11px] text-gray-500">
+                Supporte les URLs web et les images locales <code className="bg-gray-100 text-[#CF7644] px-1 py-0.5 rounded-2xs font-mono">/images/products/...</code>
+              </span>
+            </div>
 
-            <div className="flex gap-2">
-              <input
-                type="url"
-                value={imageUrlInput}
-                onChange={(e) => setImageUrlInput(e.target.value)}
-                placeholder="Coller l'URL d'une image (ex: https://images.unsplash.com/...)"
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-xs focus:outline-none focus:border-[#CF7644]"
-              />
-              <button
-                type="button"
-                onClick={handleAddImage}
-                className="bg-gray-800 text-white px-4 py-2 text-xs font-semibold uppercase tracking-wider rounded-xs hover:bg-[#CF7644] transition-colors"
-              >
-                Ajouter Image
-              </button>
+            <div className="p-3 bg-[#FAF4EF] border border-[#F1D7C5] rounded-xs text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-gray-800 flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-[#CF7644]" />
+                  <span>Dossier d'images locales créé dans le projet :</span>
+                </span>
+                <span className="font-mono text-[11px] bg-white px-2 py-0.5 rounded border border-[#F1D7C5] text-[#181818]">
+                  /public/images/products/
+                </span>
+              </div>
+              <p className="text-gray-600 text-[11px]">
+                Déposez vos images dans ce dossier (ex: <code>abaya-noir.jpg</code>). Vous pouvez ensuite simplement saisir <code>/images/products/abaya-noir.jpg</code> ci-dessous.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={imageUrlInput}
+                  onChange={(e) => setImageUrlInput(e.target.value)}
+                  placeholder="URL web (https://...) ou chemin local (/images/products/nom.jpg)"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-xs focus:outline-none focus:border-[#CF7644]"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddImage}
+                  className="bg-gray-800 text-white px-4 py-2 text-xs font-semibold uppercase tracking-wider rounded-xs hover:bg-[#CF7644] transition-colors"
+                >
+                  Ajouter Image
+                </button>
+              </div>
+
+              {/* Quick insert helper buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-[11px] text-gray-500">Raccourcis rapides :</span>
+                <button
+                  type="button"
+                  onClick={() => setImageUrlInput('/images/products/')}
+                  className="text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-0.5 rounded-2xs font-mono"
+                >
+                  + /images/products/
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImageUrlInput('/images/categories/')}
+                  className="text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-0.5 rounded-2xs font-mono"
+                >
+                  + /images/categories/
+                </button>
+              </div>
             </div>
 
             {/* Current Images list */}

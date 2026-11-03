@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Trash2, Plus, Minus, ArrowRight, ShieldCheck, Truck } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ArrowRight, ShieldCheck, Truck, MessageCircle } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 
 interface CartDrawerProps {
@@ -16,7 +16,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onNavigateToShop }) => {
     subtotal,
     deliveryFee,
     total,
-    openCheckout,
+    openWhatsAppOrder,
   } = useCart();
 
   if (!isCartOpen) return null;
@@ -188,11 +188,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onNavigateToShop }) => {
               </div>
 
               {/* Action Buttons */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <button
-                  onClick={() => openCheckout()}
-                  className="w-full flex items-center justify-center gap-3 bg-[#CF7644] hover:bg-[#b66133] text-white py-3.5 px-6 text-sm font-semibold uppercase tracking-wider transition-colors shadow-md"
+                  onClick={() => openWhatsAppOrder()}
+                  className="w-full flex items-center justify-center gap-3 bg-[#25D366] hover:bg-[#20ba5a] text-white py-3.5 px-6 text-sm font-bold uppercase tracking-wider transition-colors shadow-md rounded-xs hover:shadow-lg"
                 >
+                  <MessageCircle className="w-5 h-5 fill-white/20" />
                   <span>Commander via WhatsApp</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>

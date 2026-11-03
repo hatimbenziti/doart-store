@@ -1,12 +1,58 @@
 import React from 'react';
 import { ArrowRight, ShieldCheck, Truck, MessageCircle } from 'lucide-react';
+import { StoreSettings, Product } from '../../types';
+import { normalizeWhatsAppNumber } from '../../utils/whatsapp';
 
 interface HeroSectionProps {
+  settings?: StoreSettings | null;
+  products?: Product[];
   onShopClick: () => void;
   onExploreCollection: (categorySlug: string) => void;
+  onSelectProduct?: (product: Product) => void;
 }
 
-export const HeroSection: React.FC<HeroSectionProps> = ({ onShopClick }) => {
+export const HeroSection: React.FC<HeroSectionProps> = ({
+  settings,
+  products = [],
+  onShopClick,
+  onSelectProduct,
+}) => {
+  // Resolve Hero Configuration from Supabase/Store Settings with elegant fallbacks
+  const heroBadge = settings?.hero_badge || 'Nouvelle Collection 2026 • DoArt Studio';
+  const heroTitle = settings?.hero_title || 'L’Élégance Minimaliste Inspirée par le Maroc.';
+  const heroSubtitle =
+    settings?.hero_subtitle ||
+    'Des coupes contemporaines, des matières nobles et une fabrication soignée. Découvrez la garde-robe DoArt Store avec paiement à la livraison partout au Maroc.';
+
+  const heroImage =
+    settings?.hero_image ||
+    'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1000&q=85';
+  const heroTagBadge = settings?.hero_tag_badge || 'Casablanca Atelier';
+
+  const cardTag = settings?.hero_card_tag || 'Best-Seller';
+  const cardTitle = settings?.hero_card_title || 'Tracksuit Signature DoArt';
+  const cardPrice = settings?.hero_card_price || '520 DH';
+  const cardOriginalPrice = settings?.hero_card_original_price || '650 DH';
+  const cardImage =
+    settings?.hero_card_image ||
+    'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=300&q=80';
+
+  // Find linked product if available
+  const linkedProduct = products.find(
+    (p) =>
+      p.id === settings?.hero_featured_product_id ||
+      p.name.toLowerCase().includes(cardTitle.toLowerCase()) ||
+      p.slug === 'classic-tracksuit-doart-signature'
+  );
+
+  const handleFloatingCardClick = () => {
+    if (linkedProduct && onSelectProduct) {
+      onSelectProduct(linkedProduct);
+    } else {
+      onShopClick();
+    }
+  };
+
   return (
     <section className="relative overflow-hidden bg-[#FAF4EF] border-b border-[#F1D7C5]">
       {/* Background Graphic Accents */}
@@ -20,18 +66,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onShopClick }) => {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-[#F1D7C5] shadow-xs">
               <span className="w-2 h-2 rounded-full bg-[#CF7644] animate-ping" />
               <span className="text-[11px] font-semibold uppercase tracking-widest text-[#CF7644]">
-                Nouvelle Collection 2026 • DoArt Studio
+                {heroBadge}
               </span>
             </div>
 
             <div className="space-y-3">
               <h1 className="font-serif text-4xl sm:text-5xl md:text-6xl text-[#181818] font-bold leading-[1.15] tracking-tight">
-                L’Élégance <span className="italic font-normal text-[#CF7644]">Minimaliste</span> Inspirée par le Maroc.
+                {heroTitle}
               </h1>
               <p className="text-gray-600 text-base sm:text-lg max-w-xl mx-auto lg:mx-0 font-light leading-relaxed">
-                Des coupes contemporaines, des matières nobles et une fabrication soignée.
-                Découvrez la garde-robe DoArt Store avec{' '}
-                <strong className="text-black font-medium">paiement à la livraison</strong> partout au Maroc.
+                {heroSubtitle}
               </p>
             </div>
 
@@ -45,13 +89,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onShopClick }) => {
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              <button
-                onClick={onShopClick}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-[#181818] border border-[#F1D7C5] px-7 py-4 text-sm font-medium uppercase tracking-wider transition-colors"
+              <a
+                href={`https://wa.me/${normalizeWhatsAppNumber(settings?.whatsapp_number || '212661000000')}?text=${encodeURIComponent('Bonjour DoArt Store ! 👋 Je souhaite avoir plus d’informations sur vos collections et commander.')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-[#181818] border border-[#F1D7C5] px-7 py-4 text-sm font-medium uppercase tracking-wider transition-colors shadow-2xs"
               >
-                <MessageCircle className="w-4 h-4 text-[#CF7644]" />
+                <MessageCircle className="w-4 h-4 text-[#25D366]" />
                 <span>Commander par WhatsApp</span>
-              </button>
+              </a>
             </div>
 
             {/* Guarantees Badges */}
@@ -82,42 +128,55 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onShopClick }) => {
             </div>
           </div>
 
-          {/* Right Fashion Visual Showcase */}
+          {/* Right Fashion Visual Showcase (Fully dynamic and connected to Supabase) */}
           <div className="lg:col-span-5 relative">
             <div className="relative mx-auto max-w-md lg:max-w-none">
-              {/* Primary Image */}
+              {/* Primary Main Image */}
               <div className="aspect-3/4 overflow-hidden rounded-xs shadow-2xl bg-gray-200 border-4 border-white">
                 <img
-                  src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1000&q=85"
+                  src={heroImage}
                   alt="DoArt Store Fashion Model"
                   className="w-full h-full object-cover object-top hover:scale-105 transition-transform duration-700"
                 />
               </div>
 
-              {/* Floating Accent Card */}
-              <div className="absolute -bottom-6 -left-6 bg-white/95 backdrop-blur-md p-4 rounded-xs shadow-xl border border-[#F1D7C5] max-w-xs hidden sm:block">
+              {/* Floating Accent Card (Clickable to view product) */}
+              <div
+                onClick={handleFloatingCardClick}
+                className="absolute -bottom-6 -left-6 bg-white/95 backdrop-blur-md p-4 rounded-xs shadow-xl border border-[#F1D7C5] max-w-xs hidden sm:block cursor-pointer hover:shadow-2xl hover:scale-102 transition-all duration-300 z-10"
+                title="Découvrir cet article"
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-14 bg-gray-100 overflow-hidden shrink-0">
+                  <div className="w-12 h-14 bg-gray-100 overflow-hidden shrink-0 rounded-2xs">
                     <img
-                      src="https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=300&q=80"
-                      alt="Classic Tracksuit preview"
+                      src={cardImage}
+                      alt={cardTitle}
                       className="w-full h-full object-cover"
                     />
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-[#CF7644] uppercase tracking-wider block">
-                      Best-Seller
+                      {cardTag}
                     </span>
-                    <p className="text-xs font-medium text-black line-clamp-1">Tracksuit Signature DoArt</p>
-                    <p className="text-xs font-bold text-[#181818]">520 DH <span className="line-through text-gray-400 font-normal text-[11px]">650 DH</span></p>
+                    <p className="text-xs font-medium text-black line-clamp-1">{cardTitle}</p>
+                    <p className="text-xs font-bold text-[#181818]">
+                      {cardPrice}{' '}
+                      {cardOriginalPrice && (
+                        <span className="line-through text-gray-400 font-normal text-[11px]">
+                          {cardOriginalPrice}
+                        </span>
+                      )}
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Floating Badge */}
-              <div className="absolute top-6 -right-4 bg-[#CF7644] text-white px-4 py-2 shadow-lg rounded-xs font-serif italic text-sm">
-                Casablanca Atelier
-              </div>
+              {/* Floating Badge (e.g. "Casablanca Atelier") */}
+              {heroTagBadge && (
+                <div className="absolute top-6 -right-4 bg-[#CF7644] text-white px-4 py-2 shadow-lg rounded-xs font-serif italic text-sm select-none">
+                  {heroTagBadge}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -84,6 +84,23 @@ export default function App() {
     };
   }, []);
 
+  // Support direct product URLs from WhatsApp message links (e.g. ?product=uuid or ?product=slug)
+  useEffect(() => {
+    if (products.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const prodParam = params.get('product');
+      if (prodParam) {
+        const found = products.find(
+          (p) => p.id === prodParam || p.slug === prodParam
+        );
+        if (found) {
+          setSelectedProduct(found);
+          setCurrentView('product-detail');
+        }
+      }
+    }
+  }, [products]);
+
   const handleNavigate = (view: string, params?: Record<string, string>) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (params?.category) {
@@ -137,8 +154,11 @@ export default function App() {
                 <div className="space-y-16 sm:space-y-24">
                   {/* Hero Banner */}
                   <HeroSection
+                    settings={settings}
+                    products={products}
                     onShopClick={() => handleNavigate('shop')}
                     onExploreCollection={(slug) => handleNavigate('shop', { category: slug })}
+                    onSelectProduct={handleSelectProduct}
                   />
 
                   {/* Featured Collections Showcase */}

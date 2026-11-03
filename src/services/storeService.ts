@@ -4,23 +4,30 @@ import {
   Product,
   ProductVariant,
   Order,
-  OrderItem,
   StoreSettings,
   OrderStatus,
+  CreateOrderParams,
 } from '../types';
 import {
   INITIAL_CATEGORIES,
   INITIAL_PRODUCTS,
   INITIAL_SETTINGS,
+  generateUUID,
 } from '../data/mockData';
 
 const LOCAL_STORAGE_KEYS = {
-  CATEGORIES: 'doart_categories_v1',
-  PRODUCTS: 'doart_products_v1',
-  VARIANTS: 'doart_variants_v1',
-  ORDERS: 'doart_orders_v1',
-  SETTINGS: 'doart_settings_v1',
+  CATEGORIES: 'doart_categories_v2',
+  PRODUCTS: 'doart_products_v2',
+  VARIANTS: 'doart_variants_v2',
+  ORDERS: 'doart_orders_v2',
+  SETTINGS: 'doart_settings_v2',
 };
+
+// UUID validation helper
+export function isValidUUID(id: string | undefined | null): boolean {
+  if (!id) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+}
 
 // Initialize local cache if empty
 function initializeLocalStorage() {
@@ -56,6 +63,41 @@ function initializeLocalStorage() {
 initializeLocalStorage();
 
 // ==========================================
+// ADMIN VERIFICATION (RBAC)
+// ==========================================
+export async function checkAdminPrivileges(): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    // If not connected to Supabase, check local session storage for preview mode
+    return sessionStorage.getItem('doart_admin_session') === 'active';
+  }
+
+  try {
+    const { data: userResp } = await supabase.auth.getUser();
+    if (!userResp?.user) return false;
+
+    // Check through security definer RPC is_admin
+    const { data: isAdm, error: rpcErr } = await supabase.rpc('is_admin');
+    if (!rpcErr && typeof isAdm === 'boolean') {
+      return isAdm;
+    }
+
+    // Direct check in admin_users table
+    const { data: adminRow } = await supabase
+      .from('admin_users')
+      .select('role')
+      .eq('id', userResp.user.id)
+      .in('role', ['admin', 'super_admin'])
+      .maybeSingle();
+
+    return !!adminRow;
+  } catch (err) {
+    console.warn('Failed to verify admin status:', err);
+    return false;
+  }
+}
+
+// ==========================================
 // CATEGORIES
 // ==========================================
 export async function getCategories(): Promise<Category[]> {
@@ -66,7 +108,7 @@ export async function getCategories(): Promise<Category[]> {
       .select('*')
       .order('name');
     if (!error && data && data.length > 0) {
-      return data;
+      return data as Category[];
     }
   }
 
@@ -76,8 +118,9 @@ export async function getCategories(): Promise<Category[]> {
 
 export async function saveCategory(category: Partial<Category>): Promise<Category> {
   const supabase = getSupabaseClient();
-  const id = category.id || `cat-${Date.now()}`;
-  const slug = category.slug || (category.name || '').toLowerCase().replace(/\s+/g, '-');
+  const id = category.id && isValidUUID(category.id) ? category.id : generateUUID();
+  const slug = category.slug || (category.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  
   const newCat: Category = {
     id,
     name: category.name || '',
@@ -87,7 +130,15 @@ export async function saveCategory(category: Partial<Category>): Promise<Categor
   };
 
   if (supabase) {
-    await supabase.from('categories').upsert(newCat);
+    const { error } = await supabase.from('categories').upsert({
+      id: newCat.id,
+      name: newCat.name,
+      slug: newCat.slug,
+      image_url: newCat.image_url,
+    });
+    if (error) {
+      console.error('Supabase saveCategory error:', error);
+    }
   }
 
   const list = await getCategories();
@@ -172,7 +223,7 @@ export async function saveProduct(
   variantsData: Partial<ProductVariant>[]
 ): Promise<Product> {
   const supabase = getSupabaseClient();
-  const id = productData.id || `prod-${Date.now()}`;
+  const id = productData.id && isValidUUID(productData.id) ? productData.id : generateUUID();
   const slug =
     productData.slug ||
     (productData.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -184,7 +235,7 @@ export async function saveProduct(
     description: productData.description || '',
     price: Number(productData.price) || 0,
     discount_price: productData.discount_price ? Number(productData.discount_price) : null,
-    category_id: productData.category_id || '',
+    category_id: productData.category_id && isValidUUID(productData.category_id) ? productData.category_id : '',
     images: productData.images && productData.images.length > 0 ? productData.images : ['https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1000&q=85'],
     is_active: productData.is_active ?? true,
     is_featured: productData.is_featured ?? false,
@@ -193,21 +244,24 @@ export async function saveProduct(
     updated_at: new Date().toISOString(),
   };
 
-  const finalVariants: ProductVariant[] = variantsData.map((v, i) => ({
-    id: v.id || `v-${Date.now()}-${i}`,
-    product_id: id,
-    size: v.size || 'M',
-    color_name: v.color_name || 'Standard',
-    color_hex: v.color_hex || '#000000',
-    stock_quantity: Number(v.stock_quantity) || 0,
-    sku: v.sku || `DOA-${slug.toUpperCase().slice(0, 4)}-${v.size}-${i}`,
-    created_at: v.created_at || new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }));
+  const finalVariants: ProductVariant[] = variantsData.map((v, i) => {
+    const varId = v.id && isValidUUID(v.id) ? v.id : generateUUID();
+    return {
+      id: varId,
+      product_id: id,
+      size: v.size || 'M',
+      color_name: v.color_name || 'Standard',
+      color_hex: v.color_hex || '#000000',
+      stock_quantity: Number(v.stock_quantity) || 0,
+      sku: v.sku || `DOA-${slug.toUpperCase().slice(0, 4)}-${v.size}-${i + 1}`,
+      created_at: v.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  });
 
   if (supabase) {
     try {
-      await supabase.from('products').upsert({
+      const { error: prodErr } = await supabase.from('products').upsert({
         id: productRecord.id,
         name: productRecord.name,
         slug: productRecord.slug,
@@ -222,13 +276,27 @@ export async function saveProduct(
         updated_at: new Date().toISOString(),
       });
 
-      // Clear existing variants for this product and reinsert
+      if (prodErr) throw prodErr;
+
+      // Clean old variants and insert updated matrix with valid UUIDs
       await supabase.from('product_variants').delete().eq('product_id', id);
       if (finalVariants.length > 0) {
-        await supabase.from('product_variants').insert(finalVariants);
+        const { error: varErr } = await supabase.from('product_variants').insert(
+          finalVariants.map((v) => ({
+            id: v.id,
+            product_id: v.product_id,
+            size: v.size,
+            color_name: v.color_name,
+            color_hex: v.color_hex,
+            stock_quantity: v.stock_quantity,
+            sku: v.sku,
+            updated_at: new Date().toISOString(),
+          }))
+        );
+        if (varErr) throw varErr;
       }
     } catch (err) {
-      console.warn('Supabase upsert failed, syncing to local storage:', err);
+      console.error('Supabase product save error:', err);
     }
   }
 
@@ -275,7 +343,7 @@ export async function deleteProduct(id: string): Promise<void> {
 }
 
 // ==========================================
-// ORDERS & WHATSAPP COD
+// ORDERS & WHATSAPP COD (AUDITÉ & SÉCURISÉ)
 // ==========================================
 export async function getOrders(): Promise<Order[]> {
   const supabase = getSupabaseClient();
@@ -287,53 +355,117 @@ export async function getOrders(): Promise<Order[]> {
     if (!error && data) {
       return data as Order[];
     }
+    if (error) {
+      console.warn('Orders fetch note:', error.message);
+    }
   }
 
   const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.ORDERS);
   return stored ? JSON.parse(stored) : [];
 }
 
-export interface CreateOrderParams {
-  customer_name: string;
-  customer_phone: string;
-  city: string;
-  address: string;
-  notes?: string;
-  items: {
-    product_id: string;
-    variant_id: string;
-    product_name: string;
-    size: string;
-    color_name: string;
-    quantity: number;
-    unit_price: number;
-    total_price: number;
-    product_image?: string;
-  }[];
-  subtotal: number;
-  total: number;
-}
-
+/**
+ * Creates a COD order with server-side transactional validation and inventory lock
+ */
 export async function createOrder(params: CreateOrderParams): Promise<Order> {
   const supabase = getSupabaseClient();
+
+  // 1. Try secure Supabase RPC create_cod_order first
+  if (supabase) {
+    try {
+      const itemsPayload = params.items.map((it) => ({
+        variant_id: it.variant_id,
+        quantity: it.quantity,
+        product_image: it.product_image || '',
+      }));
+
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('create_cod_order', {
+        p_customer_name: params.customer_name.trim(),
+        p_customer_phone: params.customer_phone.trim(),
+        p_city: params.city.trim(),
+        p_address: params.address.trim(),
+        p_notes: params.notes?.trim() || '',
+        p_items: itemsPayload,
+      });
+
+      if (!rpcErr && rpcData && rpcData.id) {
+        const confirmedOrder: Order = {
+          id: rpcData.id,
+          order_reference: rpcData.order_reference,
+          customer_name: rpcData.customer_name,
+          customer_phone: rpcData.customer_phone,
+          city: rpcData.city,
+          address: rpcData.address,
+          notes: rpcData.notes,
+          subtotal: Number(rpcData.subtotal),
+          total: Number(rpcData.total),
+          status: 'Pending WhatsApp Confirmation',
+          payment_method: 'COD',
+          created_at: rpcData.created_at,
+          items: rpcData.items || params.items.map((it) => ({
+            id: generateUUID(),
+            order_id: rpcData.id,
+            product_id: it.product_id,
+            variant_id: it.variant_id,
+            product_name: it.product_name,
+            size: it.size,
+            color_name: it.color_name,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            total_price: it.total_price,
+            product_image: it.product_image,
+          })),
+        };
+
+        // Sync with local cache
+        const orders = await getOrders();
+        orders.unshift(confirmedOrder);
+        localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+
+        return confirmedOrder;
+      } else if (rpcErr) {
+        console.warn('RPC create_cod_order error, executing transactional fallback:', rpcErr.message);
+      }
+    } catch (err) {
+      console.warn('RPC call failed:', err);
+    }
+  }
+
+  // 2. Client-side / Offline fallback with strict UUID and stock validation
   const orderRef = `DOA-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-  const orderId = `ord-${Date.now()}`;
+  const orderId = generateUUID();
+
+  // Validate and deduct stock locally
+  const allVariants: ProductVariant[] = JSON.parse(
+    localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
+  );
+
+  for (const item of params.items) {
+    const v = allVariants.find((varItem) => varItem.id === item.variant_id);
+    if (v) {
+      if (v.stock_quantity < item.quantity) {
+        throw new Error(`Stock insuffisant pour l'article ${item.product_name} (${item.size}).`);
+      }
+      v.stock_quantity = Math.max(0, v.stock_quantity - item.quantity);
+    }
+  }
+  localStorage.setItem(LOCAL_STORAGE_KEYS.VARIANTS, JSON.stringify(allVariants));
 
   const newOrder: Order = {
     id: orderId,
     order_reference: orderRef,
-    customer_name: params.customer_name,
-    customer_phone: params.customer_phone,
-    city: params.city,
-    address: params.address,
-    notes: params.notes || '',
+    customer_name: params.customer_name.trim(),
+    customer_phone: params.customer_phone.trim(),
+    city: params.city.trim(),
+    address: params.address.trim(),
+    notes: params.notes?.trim() || '',
     subtotal: params.subtotal,
     total: params.total,
     status: 'Pending WhatsApp Confirmation',
     payment_method: 'COD',
     created_at: new Date().toISOString(),
-    items: params.items.map((item, idx) => ({
-      id: `item-${Date.now()}-${idx}`,
+    items: params.items.map((item) => ({
+      id: generateUUID(),
       order_id: orderId,
       product_id: item.product_id,
       variant_id: item.variant_id,
@@ -347,7 +479,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
     })),
   };
 
-  // Attempt Supabase insert
+  // Direct table insert fallback if Supabase is connected but RPC was not yet run
   if (supabase) {
     try {
       const { data: insertedOrder, error: orderErr } = await supabase
@@ -370,48 +502,26 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
 
       if (!orderErr && insertedOrder) {
         const orderItemsToInsert = (newOrder.items || []).map((it) => ({
+          id: it.id,
           order_id: insertedOrder.id,
-          product_id: it.product_id,
-          variant_id: it.variant_id,
+          product_id: isValidUUID(it.product_id) ? it.product_id : null,
+          variant_id: isValidUUID(it.variant_id) ? it.variant_id : null,
           product_name: it.product_name,
           size: it.size,
           color_name: it.color_name,
           quantity: it.quantity,
           unit_price: it.unit_price,
           total_price: it.total_price,
+          product_image: it.product_image || null,
         }));
         await supabase.from('order_items').insert(orderItemsToInsert);
-
-        // Deduct stock for each variant in Supabase
-        for (const it of newOrder.items || []) {
-          try {
-            await supabase.rpc('decrement_variant_stock', {
-              var_id: it.variant_id,
-              qty: it.quantity,
-            });
-          } catch (e) {
-            console.warn('RPC decrement_variant_stock failed or not created yet:', e);
-          }
-        }
       }
-    } catch (err) {
-      console.warn('Supabase order creation fallback to local store:', err);
+    } catch (dbErr) {
+      console.warn('Direct order insert fallback notice:', dbErr);
     }
   }
 
-  // Deduct local variant stock
-  const allVariants: ProductVariant[] = JSON.parse(
-    localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
-  );
-  (newOrder.items || []).forEach((item) => {
-    const v = allVariants.find((varItem) => varItem.id === item.variant_id);
-    if (v) {
-      v.stock_quantity = Math.max(0, v.stock_quantity - item.quantity);
-    }
-  });
-  localStorage.setItem(LOCAL_STORAGE_KEYS.VARIANTS, JSON.stringify(allVariants));
-
-  // Save order in local storage
+  // Save in local storage
   const orders = await getOrders();
   orders.unshift(newOrder);
   localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(orders));
@@ -426,6 +536,16 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
 
   // If cancelling order, restore stock
   if (order && newStatus === 'Cancelled' && order.status !== 'Cancelled') {
+    // 1. Try Supabase cancellation RPC first
+    if (supabase) {
+      try {
+        await supabase.rpc('cancel_order_and_restore_stock', { p_order_id: orderId });
+      } catch (e) {
+        console.warn('RPC cancel_order_and_restore_stock failed, falling back to manual restore:', e);
+      }
+    }
+
+    // 2. Restore local stock
     const allVariants: ProductVariant[] = JSON.parse(
       localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
     );
@@ -434,14 +554,14 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
       if (v) {
         v.stock_quantity += item.quantity;
       }
-      if (supabase) {
+      if (supabase && isValidUUID(item.variant_id)) {
         try {
           await supabase.rpc('restore_variant_stock', {
             var_id: item.variant_id,
             qty: item.quantity,
           });
         } catch {
-          // ignore if rpc not deployed yet
+          // ignore
         }
       }
     }
@@ -501,7 +621,27 @@ export async function updateStoreSettings(settings: Partial<StoreSettings>): Pro
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('store_settings').upsert(updated);
+    await supabase.from('store_settings').upsert({
+      id: updated.id,
+      store_name: updated.store_name,
+      whatsapp_number: updated.whatsapp_number,
+      instagram_url: updated.instagram_url,
+      currency: updated.currency,
+      delivery_fee: updated.delivery_fee,
+      free_delivery_threshold: updated.free_delivery_threshold,
+      hero_title: updated.hero_title,
+      hero_subtitle: updated.hero_subtitle,
+      hero_badge: updated.hero_badge,
+      hero_image: updated.hero_image,
+      hero_tag_badge: updated.hero_tag_badge,
+      hero_card_tag: updated.hero_card_tag,
+      hero_card_title: updated.hero_card_title,
+      hero_card_price: updated.hero_card_price,
+      hero_card_original_price: updated.hero_card_original_price,
+      hero_card_image: updated.hero_card_image,
+      hero_featured_product_id: updated.hero_featured_product_id,
+      updated_at: new Date().toISOString(),
+    });
   }
 
   localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(updated));

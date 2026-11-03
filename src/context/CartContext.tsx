@@ -15,6 +15,14 @@ interface CartContextType {
   deliveryFee: number;
   total: number;
   itemCount: number;
+  // Direct WhatsApp Ordering
+  isWhatsAppModalOpen: boolean;
+  directOrderItem: CartItem | null;
+  openWhatsAppOrder: (directItem?: CartItem | null) => void;
+  closeWhatsAppOrder: () => void;
+  storeWhatsAppNumber: string;
+  deliverySettings: { fee: number; freeThreshold: number };
+  // Backwards compatibility aliases
   isCheckoutOpen: boolean;
   directCheckoutItem: CartItem | null;
   openCheckout: (directItem?: CartItem | null) => void;
@@ -38,10 +46,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [directCheckoutItem, setDirectCheckoutItem] = useState<CartItem | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [directOrderItem, setDirectOrderItem] = useState<CartItem | null>(null);
   const [lastCreatedOrder, setLastCreatedOrder] = useState<Order | null>(null);
   const [deliverySettings, setDeliverySettings] = useState({ fee: 35, freeThreshold: 600 });
+  const [storeWhatsAppNumber, setStoreWhatsAppNumber] = useState('212661000000');
 
   useEffect(() => {
     try {
@@ -57,6 +66,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fee: s.delivery_fee ?? 35,
         freeThreshold: s.free_delivery_threshold ?? 600,
       });
+      if (s.whatsapp_number) {
+        setStoreWhatsAppNumber(s.whatsapp_number);
+      }
     });
   }, []);
 
@@ -122,15 +134,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const openCart = () => setIsCartOpen(true);
   const closeCart = () => setIsCartOpen(false);
 
-  const openCheckout = (directItem: CartItem | null = null) => {
-    setDirectCheckoutItem(directItem || null);
+  // Direct WhatsApp Ordering triggers
+  const openWhatsAppOrder = (directItem: CartItem | null = null) => {
+    setDirectOrderItem(directItem || null);
     setIsCartOpen(false);
-    setIsCheckoutOpen(true);
+    setIsWhatsAppModalOpen(true);
   };
 
-  const closeCheckout = () => {
-    setIsCheckoutOpen(false);
-    setDirectCheckoutItem(null);
+  const closeWhatsAppOrder = () => {
+    setIsWhatsAppModalOpen(false);
+    setDirectOrderItem(null);
   };
 
   // Subtotal calculation
@@ -158,10 +171,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deliveryFee,
         total,
         itemCount,
-        isCheckoutOpen,
-        directCheckoutItem,
-        openCheckout,
-        closeCheckout,
+        // Direct WhatsApp ordering
+        isWhatsAppModalOpen,
+        directOrderItem,
+        openWhatsAppOrder,
+        closeWhatsAppOrder,
+        storeWhatsAppNumber,
+        deliverySettings,
+        // Aliases for compatibility
+        isCheckoutOpen: isWhatsAppModalOpen,
+        directCheckoutItem: directOrderItem,
+        openCheckout: openWhatsAppOrder,
+        closeCheckout: closeWhatsAppOrder,
         lastCreatedOrder,
         setLastCreatedOrder,
       }}

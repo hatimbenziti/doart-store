@@ -28,7 +28,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   onBack,
   onSelectProduct,
 }) => {
-  const { addItem, openCart, openCheckout } = useCart();
+  const { addItem, openCart, openWhatsAppOrder } = useCart();
 
   // Active gallery image
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -144,7 +144,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       return;
     }
 
-    openCheckout({
+    openWhatsAppOrder({
       id: currentVariant.id,
       product,
       variant: currentVariant,
@@ -410,10 +410,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <button
                 onClick={handleDirectWhatsAppOrder}
                 disabled={isOutOfStock}
-                className="w-full bg-[#CF7644] hover:bg-[#b66133] disabled:opacity-50 text-white py-4 px-6 text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-3 transition-colors shadow-md rounded-xs"
+                className="w-full bg-[#25D366] hover:bg-[#20ba5a] disabled:opacity-40 disabled:cursor-not-allowed text-white py-4 px-6 text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-3 transition-all shadow-md hover:shadow-lg rounded-xs"
               >
-                <MessageCircle className="w-5 h-5 text-white fill-white/10" />
-                <span>Commander directement via WhatsApp</span>
+                <MessageCircle className="w-5 h-5 fill-white/20" />
+                <span>Commander via WhatsApp</span>
               </button>
 
               {/* Add to Cart secondary */}

@@ -22,6 +22,8 @@ import {
   Phone,
   MessageCircle,
   TrendingUp,
+  Save,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   Product,
@@ -49,6 +51,7 @@ import { normalizeWhatsAppNumber } from '../../utils/whatsapp';
 import { AdminProductModal } from './AdminProductModal';
 import { AdminOrderDetailsModal } from './AdminOrderDetailsModal';
 import { AdminSupabaseGuideModal } from './AdminSupabaseGuideModal';
+import { AdminManualOrderModal } from './AdminManualOrderModal';
 
 interface AdminDashboardProps {
   onExit: () => void;
@@ -81,6 +84,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
+  const [isManualOrderOpen, setIsManualOrderOpen] = useState(false);
   const [isSupabaseGuideOpen, setIsSupabaseGuideOpen] = useState(false);
 
   // Order filters
@@ -105,6 +109,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [settingsThreshold, setSettingsThreshold] = useState(600);
   const [settingsSavedMessage, setSettingsSavedMessage] = useState(false);
 
+  // Hero Showcase states (photo, badge, floating product card)
+  const [heroImage, setHeroImage] = useState('');
+  const [heroTagBadge, setHeroTagBadge] = useState('Casablanca Atelier');
+  const [heroCardTag, setHeroCardTag] = useState('Best-Seller');
+  const [heroCardTitle, setHeroCardTitle] = useState('Tracksuit Signature DoArt');
+  const [heroCardPrice, setHeroCardPrice] = useState('520 DH');
+  const [heroCardOriginalPrice, setHeroCardOriginalPrice] = useState('650 DH');
+  const [heroCardImage, setHeroCardImage] = useState('');
+  const [heroFeaturedProductId, setHeroFeaturedProductId] = useState('');
+  const [heroTitle, setHeroTitle] = useState('L’Élégance Minimaliste Inspirée par le Maroc.');
+  const [heroSubtitle, setHeroSubtitle] = useState('');
+  const [heroBadge, setHeroBadge] = useState('Nouvelle Collection 2026 • DoArt Studio');
+
   const isConnected = isSupabaseConnected();
 
   const loadAllData = async () => {
@@ -126,6 +143,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       setSettingsInstagram(sets.instagram_url);
       setSettingsDeliveryFee(sets.delivery_fee);
       setSettingsThreshold(sets.free_delivery_threshold);
+
+      // Hero settings
+      setHeroImage(sets.hero_image || 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1000&q=85');
+      setHeroTagBadge(sets.hero_tag_badge || 'Casablanca Atelier');
+      setHeroCardTag(sets.hero_card_tag || 'Best-Seller');
+      setHeroCardTitle(sets.hero_card_title || 'Tracksuit Signature DoArt');
+      setHeroCardPrice(sets.hero_card_price || '520 DH');
+      setHeroCardOriginalPrice(sets.hero_card_original_price || '650 DH');
+      setHeroCardImage(sets.hero_card_image || 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=300&q=80');
+      setHeroFeaturedProductId(sets.hero_featured_product_id || '');
+      setHeroTitle(sets.hero_title || 'L’Élégance Minimaliste Inspirée par le Maroc.');
+      setHeroSubtitle(sets.hero_subtitle || 'Des coupes contemporaines, des matières nobles et une fabrication soignée. Découvrez la garde-robe DoArt Store avec paiement à la livraison partout au Maroc.');
+      setHeroBadge(sets.hero_badge || 'Nouvelle Collection 2026 • DoArt Studio');
     } catch (err) {
       console.error('Failed to load admin data:', err);
     } finally {
@@ -244,6 +274,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     await loadAllData();
   };
 
+  const handleManualOrderCreated = async (_newOrder: Order) => {
+    await loadAllData();
+  };
+
   // Category Actions
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,7 +299,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     }
   };
 
-  // Settings Save
+  // Auto-link a product to the Hero floating card
+  const handleLinkProductToHeroCard = (prodId: string) => {
+    setHeroFeaturedProductId(prodId);
+    if (!prodId) return;
+    const p = products.find((prod) => prod.id === prodId);
+    if (p) {
+      setHeroCardTitle(p.name);
+      setHeroCardPrice(`${p.discount_price ?? p.price} DH`);
+      setHeroCardOriginalPrice(p.discount_price ? `${p.price} DH` : '');
+      if (p.images && p.images[0]) {
+        setHeroCardImage(p.images[0]);
+      }
+    }
+  };
+
+  // Settings Save (WhatsApp, Delivery & Hero Showcase Visuals)
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     await updateStoreSettings({
@@ -274,6 +323,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       instagram_url: settingsInstagram.trim(),
       delivery_fee: Number(settingsDeliveryFee),
       free_delivery_threshold: Number(settingsThreshold),
+      // Hero showcase values
+      hero_image: heroImage.trim(),
+      hero_tag_badge: heroTagBadge.trim(),
+      hero_card_tag: heroCardTag.trim(),
+      hero_card_title: heroCardTitle.trim(),
+      hero_card_price: heroCardPrice.trim(),
+      hero_card_original_price: heroCardOriginalPrice.trim(),
+      hero_card_image: heroCardImage.trim(),
+      hero_featured_product_id: heroFeaturedProductId,
+      hero_title: heroTitle.trim(),
+      hero_subtitle: heroSubtitle.trim(),
+      hero_badge: heroBadge.trim(),
     });
     setSettingsSavedMessage(true);
     setTimeout(() => setSettingsSavedMessage(false), 3000);
@@ -319,10 +380,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
             <div className="h-4 w-px bg-gray-200" />
 
-            <div className="flex items-center gap-2">
-              <span className="font-serif font-bold tracking-widest text-lg text-[#181818]">
-                DOART STORE
-              </span>
+            <div className="flex items-center gap-3">
+              <img
+                src="/images/banners/Dologo-01.png"
+                alt="DoArt Store Logo"
+                className="h-8 w-auto object-contain"
+              />
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#FAF4EF] text-[#CF7644] border border-[#F1D7C5]">
                 Dashboard Admin
               </span>
@@ -531,9 +594,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   Gestion des Commandes WhatsApp
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Consultez, confirmez ou annulez les commandes reçues partout au Maroc.
+                  Consultez, confirmez ou enregistrez les commandes convenues avec vos clients sur WhatsApp.
                 </p>
               </div>
+              <button
+                onClick={() => setIsManualOrderOpen(true)}
+                className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#20ba5a] text-white px-4 py-2.5 rounded-xs text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Enregistrer commande WhatsApp</span>
+              </button>
             </div>
 
             {/* Filter Bar */}
@@ -1040,12 +1110,291 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              {/* ========================================================= */}
+              {/* SECTION: VISUELS DU HERO (IMAGE, BADGE & CARTE PRODUIT) */}
+              {/* ========================================================= */}
+              <div className="space-y-6 pt-2 border-t border-gray-200">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div>
+                    <h3 className="text-xs uppercase tracking-wider font-bold text-[#CF7644]">
+                      Visuels & Showcase du Hero (Page d'Accueil)
+                    </h3>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      Personnalisez la grande photo de présentation, le badge flottant et la carte produit mise en avant.
+                    </p>
+                  </div>
+                  <span className="text-[10px] bg-[#FAF4EF] text-[#CF7644] font-bold px-2 py-0.5 rounded border border-[#F1D7C5]">
+                    En direct sur le site
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* Left Column: Form Inputs */}
+                  <div className="lg:col-span-7 space-y-4 text-xs">
+                    {/* 1. Main Hero Image */}
+                    <div className="bg-gray-50 p-3.5 border border-gray-200 rounded-xs space-y-2">
+                      <label className="font-bold uppercase tracking-wider text-gray-800 block">
+                        Grande Photo du Hero (Modèle) <span className="text-[#CF7644]">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={heroImage}
+                        onChange={(e) => setHeroImage(e.target.value)}
+                        placeholder="URL web ou /images/banners/nom.jpg"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-xs bg-white focus:outline-none focus:border-[#CF7644]"
+                      />
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-gray-500">
+                        <span>Raccourcis :</span>
+                        <button
+                          type="button"
+                          onClick={() => setHeroImage('/images/banners/')}
+                          className="bg-white border px-1.5 py-0.5 rounded text-[#CF7644] font-mono hover:bg-gray-100"
+                        >
+                          + /images/banners/
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHeroImage('/images/products/')}
+                          className="bg-white border px-1.5 py-0.5 rounded text-[#CF7644] font-mono hover:bg-gray-100"
+                        >
+                          + /images/products/
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 2. Top-Right Floating Badge */}
+                    <div className="bg-gray-50 p-3.5 border border-gray-200 rounded-xs space-y-1.5">
+                      <label className="font-bold uppercase tracking-wider text-gray-800 block">
+                        Badge Flottant (Haut à Droite)
+                      </label>
+                      <input
+                        type="text"
+                        value={heroTagBadge}
+                        onChange={(e) => setHeroTagBadge(e.target.value)}
+                        placeholder="ex: Casablanca Atelier ou Édition Limitée"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-xs bg-white focus:outline-none focus:border-[#CF7644]"
+                      />
+                      <p className="text-[11px] text-gray-500">
+                        Affiché dans l'étiquette terracotta en haut à droite de l'image.
+                      </p>
+                    </div>
+
+                    {/* 3. Bottom-Left Floating Product Card */}
+                    <div className="bg-gray-50 p-3.5 border border-gray-200 rounded-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold uppercase tracking-wider text-gray-800 block">
+                          Carte Produit Flottante (Bas à Gauche)
+                        </label>
+                        <span className="text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200">
+                          Cliquable vers le produit
+                        </span>
+                      </div>
+
+                      {/* Quick auto-fill from existing products */}
+                      <div className="bg-white p-2.5 border border-[#F1D7C5] rounded-xs space-y-1">
+                        <label className="text-[11px] font-semibold text-gray-700 block">
+                          Pré-remplir automatiquement depuis votre catalogue :
+                        </label>
+                        <select
+                          value={heroFeaturedProductId}
+                          onChange={(e) => handleLinkProductToHeroCard(e.target.value)}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded-xs text-xs bg-white focus:outline-none focus:border-[#CF7644]"
+                        >
+                          <option value="">-- Choisir un vêtement existant --</option>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.discount_price ?? p.price} DH)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] text-gray-600 font-semibold block mb-1">
+                            Tag de la carte
+                          </label>
+                          <input
+                            type="text"
+                            value={heroCardTag}
+                            onChange={(e) => setHeroCardTag(e.target.value)}
+                            placeholder="ex: Best-Seller"
+                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] text-gray-600 font-semibold block mb-1">
+                            Titre du vêtement
+                          </label>
+                          <input
+                            type="text"
+                            value={heroCardTitle}
+                            onChange={(e) => setHeroCardTitle(e.target.value)}
+                            placeholder="ex: Tracksuit Signature DoArt"
+                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] text-gray-600 font-semibold block mb-1">
+                            Prix affiché
+                          </label>
+                          <input
+                            type="text"
+                            value={heroCardPrice}
+                            onChange={(e) => setHeroCardPrice(e.target.value)}
+                            placeholder="ex: 520 DH"
+                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] text-gray-600 font-semibold block mb-1">
+                            Prix d'origine barré (Optionnel)
+                          </label>
+                          <input
+                            type="text"
+                            value={heroCardOriginalPrice}
+                            onChange={(e) => setHeroCardOriginalPrice(e.target.value)}
+                            placeholder="ex: 650 DH"
+                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] text-gray-600 font-semibold block mb-1">
+                          Miniature de la carte (URL ou /images/...)
+                        </label>
+                        <input
+                          type="text"
+                          value={heroCardImage}
+                          onChange={(e) => setHeroCardImage(e.target.value)}
+                          placeholder="URL ou /images/products/..."
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 4. Hero Texts */}
+                    <div className="bg-gray-50 p-3.5 border border-gray-200 rounded-xs space-y-3">
+                      <label className="font-bold uppercase tracking-wider text-gray-800 block">
+                        Textes & Slogan du Hero
+                      </label>
+
+                      <div>
+                        <label className="text-[11px] text-gray-600 font-semibold block mb-1">
+                          Badge d'en-tête
+                        </label>
+                        <input
+                          type="text"
+                          value={heroBadge}
+                          onChange={(e) => setHeroBadge(e.target.value)}
+                          placeholder="ex: Nouvelle Collection 2026 • DoArt Studio"
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] text-gray-600 font-semibold block mb-1">
+                          Titre Principal
+                        </label>
+                        <input
+                          type="text"
+                          value={heroTitle}
+                          onChange={(e) => setHeroTitle(e.target.value)}
+                          placeholder="L’Élégance Minimaliste Inspirée par le Maroc."
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] text-gray-600 font-semibold block mb-1">
+                          Slogan / Description
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={heroSubtitle}
+                          onChange={(e) => setHeroSubtitle(e.target.value)}
+                          placeholder="Des coupes contemporaines, des matières nobles..."
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Live Interactive Visual Preview */}
+                  <div className="lg:col-span-5 bg-white p-4 border border-[#F1D7C5] rounded-xs shadow-xs space-y-3 sticky top-24">
+                    <div className="flex items-center justify-between pb-2 border-b">
+                      <span className="font-bold text-xs uppercase tracking-wider text-[#181818] flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-[#CF7644]" />
+                        <span>Aperçu en direct du Hero</span>
+                      </span>
+                      <span className="text-[10px] text-gray-400">Simulation</span>
+                    </div>
+
+                    {/* Miniature Hero Visual Showcase */}
+                    <div className="relative aspect-3/4 overflow-hidden rounded-xs bg-gray-100 border-2 border-[#FAF4EF] shadow-md">
+                      <img
+                        src={heroImage || 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&q=80'}
+                        alt="Hero Preview"
+                        className="w-full h-full object-cover object-top"
+                      />
+
+                      {/* Top-Right Badge Preview */}
+                      {heroTagBadge && (
+                        <div className="absolute top-3 right-2 bg-[#CF7644] text-white px-2.5 py-1 shadow-md rounded-2xs font-serif italic text-[11px]">
+                          {heroTagBadge}
+                        </div>
+                      )}
+
+                      {/* Bottom-Left Floating Card Preview */}
+                      <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-xs p-2.5 rounded-xs shadow-xl border border-[#F1D7C5] max-w-[210px]">
+                        <div className="flex items-center gap-2">
+                          <div className="w-9 h-11 bg-gray-200 overflow-hidden shrink-0 rounded-2xs">
+                            <img
+                              src={heroCardImage || 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=200&q=80'}
+                              alt="Thumbnail"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-[9px] font-bold text-[#CF7644] uppercase tracking-wider block truncate">
+                              {heroCardTag || 'Best-Seller'}
+                            </span>
+                            <p className="text-[11px] font-bold text-[#181818] truncate leading-tight">
+                              {heroCardTitle || 'Tracksuit Signature'}
+                            </p>
+                            <p className="text-[11px] font-bold text-[#181818]">
+                              {heroCardPrice || '520 DH'}{' '}
+                              {heroCardOriginalPrice && (
+                                <span className="line-through text-gray-400 font-normal text-[9px] ml-1">
+                                  {heroCardOriginalPrice}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-gray-500 text-center italic">
+                      Les modifications s'appliqueront immédiatement dès que vous cliquerez sur « Sauvegarder les paramètres ».
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end">
                 <button
                   type="submit"
-                  className="bg-[#CF7644] hover:bg-[#b66133] text-white px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xs transition-colors shadow-sm"
+                  className="bg-[#CF7644] hover:bg-[#b66133] text-white px-8 py-3 text-xs font-bold uppercase tracking-wider rounded-xs transition-colors shadow-md flex items-center gap-2"
                 >
-                  Sauvegarder les paramètres
+                  <Save className="w-4 h-4" />
+                  <span>Sauvegarder les paramètres & Visuels Hero</span>
                 </button>
               </div>
             </form>
@@ -1085,6 +1434,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         onClose={() => setIsOrderDetailsOpen(false)}
         onUpdateStatus={handleUpdateOrderStatus}
         onUpdateCustomer={handleUpdateCustomer}
+      />
+
+      {/* Manual Order Modal */}
+      <AdminManualOrderModal
+        isOpen={isManualOrderOpen}
+        products={products}
+        onClose={() => setIsManualOrderOpen(false)}
+        onOrderCreated={handleManualOrderCreated}
       />
 
       {/* Supabase Guide Modal */}

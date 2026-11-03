@@ -21,12 +21,52 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onExit }) => 
     try {
       const supabase = getSupabaseClient();
       if (supabase) {
-        const { error: authError } = await supabase.auth.signInWithPassword({
-          email,
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
           password,
         });
         if (authError) {
           throw authError;
+        }
+
+        if (authData?.user) {
+          // 1. Verify through security definer RPC is_admin
+          const { data: isAdmin, error: rpcErr } = await supabase.rpc('is_admin');
+          if (!rpcErr && isAdmin === true) {
+            sessionStorage.setItem('doart_admin_session', 'active');
+            onSuccess();
+            return;
+          }
+
+          // 2. Direct check in admin_users table
+          const { data: adminRow } = await supabase
+            .from('admin_users')
+            .select('role')
+            .eq('id', authData.user.id)
+            .maybeSingle();
+
+          if (adminRow && (adminRow.role === 'admin' || adminRow.role === 'super_admin')) {
+            sessionStorage.setItem('doart_admin_session', 'active');
+            onSuccess();
+            return;
+          }
+
+          // 3. Bootstrapping: If admin_users is completely empty, enroll first user
+          const { count } = await supabase.from('admin_users').select('*', { count: 'exact', head: true });
+          if (count === 0) {
+            await supabase.from('admin_users').insert({
+              id: authData.user.id,
+              email: authData.user.email || email.trim(),
+              role: 'admin',
+            });
+            sessionStorage.setItem('doart_admin_session', 'active');
+            onSuccess();
+            return;
+          }
+
+          // Not authorized
+          await supabase.auth.signOut();
+          throw new Error("Accès refusé : Ce compte ne possède pas les autorisations d'administrateur DoArt Store.");
         }
         onSuccess();
       } else {
@@ -54,11 +94,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onExit }) => 
 
   return (
     <div className="min-h-screen bg-[#FAF4EF] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h2 className="font-serif text-3xl font-bold tracking-[0.2em] text-[#181818]">
-          DOART STORE
-        </h2>
-        <p className="mt-1 text-xs uppercase tracking-[0.3em] text-[#CF7644] font-medium">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center flex flex-col items-center">
+        <img
+          src="/images/banners/Dologo-01.png"
+          alt="DoArt Store Logo"
+          className="h-16 w-auto object-contain mx-auto mb-2"
+        />
+        <p className="text-xs uppercase tracking-[0.25em] text-[#CF7644] font-semibold">
           Espace d'Administration Sécurisé
         </p>
       </div>

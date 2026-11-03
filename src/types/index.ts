@@ -83,6 +83,18 @@ export interface StoreSettings {
   delivery_fee: number;
   free_delivery_threshold: number;
   updated_at?: string;
+  // Hero Visual Showcase Settings
+  hero_title?: string;
+  hero_subtitle?: string;
+  hero_badge?: string;
+  hero_image?: string;
+  hero_tag_badge?: string; // "Casablanca Atelier"
+  hero_card_tag?: string; // "Best-Seller"
+  hero_card_title?: string;
+  hero_card_price?: string;
+  hero_card_original_price?: string;
+  hero_card_image?: string;
+  hero_featured_product_id?: string;
 }
 
 export interface CartItem {
@@ -90,4 +102,32 @@ export interface CartItem {
   product: Product;
   variant: ProductVariant;
   quantity: number;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  role: 'admin' | 'super_admin';
+  created_at?: string;
+}
+
+export interface CreateOrderParams {
+  customer_name: string;
+  customer_phone: string;
+  city: string;
+  address: string;
+  notes?: string;
+  items: {
+    product_id: string;
+    variant_id: string;
+    product_name: string;
+    size: string;
+    color_name: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+    product_image?: string;
+  }[];
+  subtotal: number;
+  total: number;
 }

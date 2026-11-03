@@ -63,13 +63,16 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onOpenS
         </div>
 
         {/* Center: Brand Logo */}
-        <div className="text-center cursor-pointer select-none" onClick={() => handleLinkClick('home')}>
-          <h1 className="font-serif text-2xl sm:text-3xl tracking-[0.25em] font-semibold text-[#181818] hover:opacity-90 transition-opacity">
-            DOART
-          </h1>
-          <p className="text-[9px] uppercase tracking-[0.45em] text-[#CF7644] -mt-1 font-sans font-medium">
-            STORE • MOROCCO
-          </p>
+        <div
+          className="flex items-center justify-center cursor-pointer select-none py-1 group"
+          onClick={() => handleLinkClick('home')}
+          title="Accueil DoArt Store"
+        >
+          <img
+            src="/images/banners/Dologo-01.png"
+            alt="DoArt Studio Store"
+            className="h-10 sm:h-12 md:h-13 w-auto object-contain group-hover:opacity-90 transition-opacity"
+          />
         </div>
 
         {/* Right: Actions (Search, Admin, Cart) */}
