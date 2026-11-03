@@ -68,7 +68,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [settings, setSettings] = useState<StoreSettings>({
     id: 'settings-1',
     store_name: 'DoArt Store',
-    whatsapp_number: '212661000000',
+    whatsapp_number: '212705176222',
     instagram_url: 'https://instagram.com/doartstore',
     currency: 'MAD',
     delivery_fee: 35,
@@ -318,7 +318,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     await updateStoreSettings({
-      whatsapp_number: settingsWhatsApp.trim(),
+      whatsapp_number: normalizeWhatsAppNumber(settingsWhatsApp.trim()),
       store_name: settingsStoreName.trim(),
       instagram_url: settingsInstagram.trim(),
       delivery_fee: Number(settingsDeliveryFee),
@@ -1036,7 +1036,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       required
                       value={settingsWhatsApp}
                       onChange={(e) => setSettingsWhatsApp(e.target.value)}
-                      placeholder="212661000000"
+                      placeholder="0705176222 ou 212705176222"
                       className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-xs focus:outline-none focus:border-[#CF7644] font-mono"
                     />
                   </div>

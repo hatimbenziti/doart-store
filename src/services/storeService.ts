@@ -365,73 +365,86 @@ export async function getOrders(): Promise<Order[]> {
 }
 
 /**
- * Creates a COD order with server-side transactional validation and inventory lock
+ * Creates an admin manual order with server-side transactional validation and inventory lock
+ * Exclusively executed by authenticated administrators.
  */
 export async function createOrder(params: CreateOrderParams): Promise<Order> {
   const supabase = getSupabaseClient();
 
-  // 1. Try secure Supabase RPC create_cod_order first
+  // 1. If Supabase is connected, execute the secure admin RPC
   if (supabase) {
-    try {
-      const itemsPayload = params.items.map((it) => ({
-        variant_id: it.variant_id,
-        quantity: it.quantity,
-        product_image: it.product_image || '',
-      }));
+    const itemsPayload = params.items.map((it) => ({
+      variant_id: it.variant_id,
+      quantity: it.quantity,
+      product_image: it.product_image || '',
+    }));
 
-      const { data: rpcData, error: rpcErr } = await supabase.rpc('create_cod_order', {
-        p_customer_name: params.customer_name.trim(),
-        p_customer_phone: params.customer_phone.trim(),
-        p_city: params.city.trim(),
-        p_address: params.address.trim(),
-        p_notes: params.notes?.trim() || '',
-        p_items: itemsPayload,
-      });
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('create_admin_manual_order', {
+      p_customer_name: params.customer_name.trim(),
+      p_customer_phone: params.customer_phone.trim(),
+      p_city: params.city.trim(),
+      p_address: params.address.trim(),
+      p_notes: params.notes?.trim() || '',
+      p_items: itemsPayload,
+      p_status: 'Pending WhatsApp Confirmation',
+    });
 
-      if (!rpcErr && rpcData && rpcData.id) {
-        const confirmedOrder: Order = {
-          id: rpcData.id,
-          order_reference: rpcData.order_reference,
-          customer_name: rpcData.customer_name,
-          customer_phone: rpcData.customer_phone,
-          city: rpcData.city,
-          address: rpcData.address,
-          notes: rpcData.notes,
-          subtotal: Number(rpcData.subtotal),
-          total: Number(rpcData.total),
-          status: 'Pending WhatsApp Confirmation',
-          payment_method: 'COD',
-          created_at: rpcData.created_at,
-          items: rpcData.items || params.items.map((it) => ({
-            id: generateUUID(),
-            order_id: rpcData.id,
-            product_id: it.product_id,
-            variant_id: it.variant_id,
-            product_name: it.product_name,
-            size: it.size,
-            color_name: it.color_name,
-            quantity: it.quantity,
-            unit_price: it.unit_price,
-            total_price: it.total_price,
-            product_image: it.product_image,
-          })),
-        };
+    if (rpcErr) {
+      console.error('RPC create_admin_manual_order error:', rpcErr);
+      throw new Error(rpcErr.message || 'Erreur lors de la création de la commande sur Supabase.');
+    }
 
-        // Sync with local cache
-        const orders = await getOrders();
-        orders.unshift(confirmedOrder);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    if (rpcData && rpcData.id) {
+      const confirmedOrder: Order = {
+        id: rpcData.id,
+        order_reference: rpcData.order_reference,
+        customer_name: rpcData.customer_name,
+        customer_phone: rpcData.customer_phone,
+        city: rpcData.city,
+        address: rpcData.address,
+        notes: rpcData.notes,
+        subtotal: Number(rpcData.subtotal),
+        total: Number(rpcData.total),
+        status: (rpcData.status as OrderStatus) || 'Pending WhatsApp Confirmation',
+        payment_method: 'COD',
+        created_at: rpcData.created_at,
+        items: rpcData.items || params.items.map((it) => ({
+          id: generateUUID(),
+          order_id: rpcData.id,
+          product_id: it.product_id,
+          variant_id: it.variant_id,
+          product_name: it.product_name,
+          size: it.size,
+          color_name: it.color_name,
+          quantity: it.quantity,
+          unit_price: it.unit_price,
+          total_price: it.total_price,
+          product_image: it.product_image,
+        })),
+      };
 
-        return confirmedOrder;
-      } else if (rpcErr) {
-        console.warn('RPC create_cod_order error, executing transactional fallback:', rpcErr.message);
+      // Sync with local cache
+      const orders = await getOrders();
+      orders.unshift(confirmedOrder);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+
+      // Also refresh product variants in local cache so stock reflects in UI immediately
+      const allVariants: ProductVariant[] = JSON.parse(
+        localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
+      );
+      for (const item of params.items) {
+        const v = allVariants.find((varItem) => varItem.id === item.variant_id);
+        if (v) {
+          v.stock_quantity = Math.max(0, v.stock_quantity - item.quantity);
+        }
       }
-    } catch (err) {
-      console.warn('RPC call failed:', err);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.VARIANTS, JSON.stringify(allVariants));
+
+      return confirmedOrder;
     }
   }
 
-  // 2. Client-side / Offline fallback with strict UUID and stock validation
+  // 2. Client-side / Offline fallback (preview mode when Supabase not connected)
   const orderRef = `DOA-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
   const orderId = generateUUID();
 
@@ -478,48 +491,6 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
       product_image: item.product_image,
     })),
   };
-
-  // Direct table insert fallback if Supabase is connected but RPC was not yet run
-  if (supabase) {
-    try {
-      const { data: insertedOrder, error: orderErr } = await supabase
-        .from('orders')
-        .insert({
-          id: newOrder.id,
-          order_reference: newOrder.order_reference,
-          customer_name: newOrder.customer_name,
-          customer_phone: newOrder.customer_phone,
-          city: newOrder.city,
-          address: newOrder.address,
-          notes: newOrder.notes,
-          subtotal: newOrder.subtotal,
-          total: newOrder.total,
-          status: newOrder.status,
-          payment_method: newOrder.payment_method,
-        })
-        .select()
-        .single();
-
-      if (!orderErr && insertedOrder) {
-        const orderItemsToInsert = (newOrder.items || []).map((it) => ({
-          id: it.id,
-          order_id: insertedOrder.id,
-          product_id: isValidUUID(it.product_id) ? it.product_id : null,
-          variant_id: isValidUUID(it.variant_id) ? it.variant_id : null,
-          product_name: it.product_name,
-          size: it.size,
-          color_name: it.color_name,
-          quantity: it.quantity,
-          unit_price: it.unit_price,
-          total_price: it.total_price,
-          product_image: it.product_image || null,
-        }));
-        await supabase.from('order_items').insert(orderItemsToInsert);
-      }
-    } catch (dbErr) {
-      console.warn('Direct order insert fallback notice:', dbErr);
-    }
-  }
 
   // Save in local storage
   const orders = await getOrders();
@@ -603,12 +574,28 @@ export async function getStoreSettings(): Promise<StoreSettings> {
   if (supabase) {
     const { data, error } = await supabase.from('store_settings').select('*').limit(1).single();
     if (!error && data) {
-      return data as StoreSettings;
+      const dbSettings = data as StoreSettings;
+      if (!dbSettings.whatsapp_number || dbSettings.whatsapp_number === '212661000000') {
+        dbSettings.whatsapp_number = '212705176222';
+      }
+      return dbSettings;
     }
   }
 
   const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.SETTINGS);
-  return stored ? JSON.parse(stored) : INITIAL_SETTINGS;
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as StoreSettings;
+      if (!parsed.whatsapp_number || parsed.whatsapp_number === '212661000000') {
+        parsed.whatsapp_number = '212705176222';
+        localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(parsed));
+      }
+      return parsed;
+    } catch {
+      // fallback
+    }
+  }
+  return INITIAL_SETTINGS;
 }
 
 export async function updateStoreSettings(settings: Partial<StoreSettings>): Promise<StoreSettings> {

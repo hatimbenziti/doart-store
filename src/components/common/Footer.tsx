@@ -1,12 +1,15 @@
 import React from 'react';
 import { ShieldCheck, Truck, MessageCircle, Heart, Phone, MapPin, Mail, Instagram } from 'lucide-react';
+import { normalizeWhatsAppNumber, formatMoroccanDisplayPhone } from '../../utils/whatsapp';
 
 interface FooterProps {
   onNavigate: (view: string, params?: Record<string, string>) => void;
   whatsappNumber?: string;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onNavigate, whatsappNumber = '212661000000' }) => {
+export const Footer: React.FC<FooterProps> = ({ onNavigate, whatsappNumber = '212705176222' }) => {
+  const cleanNumber = normalizeWhatsAppNumber(whatsappNumber);
+  const displayPhone = formatMoroccanDisplayPhone(cleanNumber);
   return (
     <footer className="bg-[#181818] text-[#F1D7C5] pt-16 pb-12 border-t border-[#333333]">
       {/* Guarantees Ribbon */}
@@ -82,7 +85,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, whatsappNumber = '21
               <Instagram className="w-4 h-4" />
             </a>
             <a
-              href={`https://wa.me/${whatsappNumber}`}
+              href={`https://wa.me/${cleanNumber}`}
               target="_blank"
               rel="noreferrer"
               className="w-9 h-9 rounded-full bg-[#242424] hover:bg-[#25D366] flex items-center justify-center text-white transition-colors"
@@ -179,8 +182,14 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, whatsappNumber = '21
             </p>
             <p className="flex items-center gap-2">
               <Phone className="w-4 h-4 text-[#CF7644] shrink-0" />
-              <a href={`https://wa.me/${whatsappNumber}`} target="_blank" rel="noreferrer" className="hover:text-white">
-                +{whatsappNumber} (WhatsApp)
+              <a
+                href={`https://wa.me/${cleanNumber}`}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-white transition-colors"
+                title="Contacter sur WhatsApp"
+              >
+                {displayPhone.international} <span className="text-gray-400">({displayPhone.local})</span>
               </a>
             </p>
             <p className="flex items-center gap-2">

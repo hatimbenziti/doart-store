@@ -50,7 +50,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [directOrderItem, setDirectOrderItem] = useState<CartItem | null>(null);
   const [lastCreatedOrder, setLastCreatedOrder] = useState<Order | null>(null);
   const [deliverySettings, setDeliverySettings] = useState({ fee: 35, freeThreshold: 600 });
-  const [storeWhatsAppNumber, setStoreWhatsAppNumber] = useState('212661000000');
+  const [storeWhatsAppNumber, setStoreWhatsAppNumber] = useState('212705176222');
 
   useEffect(() => {
     try {

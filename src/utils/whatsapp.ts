@@ -7,10 +7,10 @@ export function normalizeWhatsAppNumber(rawNumber: string): string {
   let cleaned = (rawNumber || '').replace(/[^0-9]/g, '');
 
   if (!cleaned) {
-    return '212661000000';
+    return '212705176222';
   }
 
-  // If starts with 0 (e.g. 0661234567 or 0761234567), replace leading 0 with 212
+  // If starts with 0 (e.g. 0705176222 or 0661234567), replace leading 0 with 212
   if (cleaned.startsWith('0') && cleaned.length === 10) {
     cleaned = '212' + cleaned.substring(1);
   }
@@ -26,6 +26,20 @@ export function normalizeWhatsAppNumber(rawNumber: string): string {
   }
 
   return cleaned;
+}
+
+/**
+ * Formats a phone number for user-friendly Moroccan and international display
+ */
+export function formatMoroccanDisplayPhone(rawNumber: string): { international: string; local: string } {
+  const norm = normalizeWhatsAppNumber(rawNumber);
+  if (norm.startsWith('212') && norm.length === 12) {
+    const rest = norm.substring(3); // e.g. 705176222
+    const local = `0${rest.slice(0, 1)} ${rest.slice(1, 3)} ${rest.slice(3, 5)} ${rest.slice(5, 7)} ${rest.slice(7, 9)}`;
+    const intl = `+212 ${rest.slice(0, 3)} ${rest.slice(3, 6)} ${rest.slice(6, 9)}`;
+    return { international: intl, local };
+  }
+  return { international: `+${norm}`, local: norm };
 }
 
 export interface DirectWhatsAppProduct {

@@ -90,7 +90,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </button>
 
               <a
-                href={`https://wa.me/${normalizeWhatsAppNumber(settings?.whatsapp_number || '212661000000')}?text=${encodeURIComponent('Bonjour DoArt Store ! 👋 Je souhaite avoir plus d’informations sur vos collections et commander.')}`}
+                href={`https://wa.me/${normalizeWhatsAppNumber(settings?.whatsapp_number || '212705176222')}?text=${encodeURIComponent('Bonjour DoArt Store ! 👋 Je souhaite avoir plus d’informations sur vos collections et commander.')}`}
                 target="_blank"
                 rel="noreferrer"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-[#181818] border border-[#F1D7C5] px-7 py-4 text-sm font-medium uppercase tracking-wider transition-colors shadow-2xs"

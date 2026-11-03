@@ -199,7 +199,7 @@ export const INITIAL_PRODUCTS: Product[] = [
 export const INITIAL_SETTINGS: StoreSettings = {
   id: 'c0000001-0000-4000-8000-000000000001',
   store_name: 'DoArt Store',
-  whatsapp_number: '212661000000', // Moroccan standard format
+  whatsapp_number: '212705176222', // Moroccan official WhatsApp: 0705176222
   instagram_url: 'https://instagram.com/doartstore',
   currency: 'MAD',
   delivery_fee: 35,

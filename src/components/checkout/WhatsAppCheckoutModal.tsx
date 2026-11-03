@@ -20,6 +20,7 @@ import {
   createWhatsAppDirectUrl,
   createWhatsAppWebDirectUrl,
   normalizeWhatsAppNumber,
+  formatMoroccanDisplayPhone,
 } from '../../utils/whatsapp';
 
 export const WhatsAppCheckoutModal: React.FC = () => {
@@ -36,7 +37,7 @@ export const WhatsAppCheckoutModal: React.FC = () => {
     return directCheckoutItem ? [directCheckoutItem] : items;
   }, [directCheckoutItem, items]);
 
-  const [storeWhatsAppNumber, setStoreWhatsAppNumber] = useState('212661000000');
+  const [storeWhatsAppNumber, setStoreWhatsAppNumber] = useState('212705176222');
   const [storeName, setStoreName] = useState('DoArt Store');
   const [deliverySettings, setDeliverySettings] = useState({ fee: 35, freeThreshold: 600 });
   const [hasAttemptedOpen, setHasAttemptedOpen] = useState(false);
@@ -282,8 +283,11 @@ export const WhatsAppCheckoutModal: React.FC = () => {
                 <div className="text-[11px] text-gray-500 pt-1">
                   Numéro WhatsApp direct :{' '}
                   <strong className="text-gray-800 font-mono">
-                    +{normalizeWhatsAppNumber(storeWhatsAppNumber)}
-                  </strong>
+                    {formatMoroccanDisplayPhone(storeWhatsAppNumber).international}
+                  </strong>{' '}
+                  <span className="text-gray-500 font-medium">
+                    ({formatMoroccanDisplayPhone(storeWhatsAppNumber).local})
+                  </span>
                 </div>
               </div>
             )}
