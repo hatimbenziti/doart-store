@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Plus,
@@ -8,8 +8,12 @@ import {
   AlertCircle,
   Layers,
   Sparkles,
+  Upload,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react';
 import { Product, ProductVariant, Category } from '../../types';
+import { getSupabaseClient } from '../../lib/supabase';
 
 interface AdminProductModalProps {
   product: Product | null;
@@ -38,6 +42,12 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({
   const [isActive, setIsActive] = useState(true);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isNew, setIsNew] = useState(true);
+
+  // File upload states for Supabase Storage 'products' bucket
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
   // Variant configuration states: Sizes list and Colors list
   const [sizesList, setSizesList] = useState<string[]>(['S', 'M', 'L', 'XL']);
@@ -194,6 +204,98 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({
 
   const handleRemoveImage = (indexToRemove: number) => {
     setImages(images.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  // Upload local images directly to Supabase Storage 'products' bucket
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadError(null);
+    setUploadSuccess(null);
+    setIsUploading(true);
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    const filesToUpload: File[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (validTypes.includes(file.type.toLowerCase())) {
+        filesToUpload.push(file);
+      } else {
+        setUploadError(`Le fichier "${file.name}" n'est pas un format valide. Seuls les formats JPG, PNG et WEBP sont acceptés.`);
+        setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+    }
+
+    const uploadedUrls: string[] = [];
+    const supabase = getSupabaseClient();
+
+    try {
+      for (const file of filesToUpload) {
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const cleanBase = file.name
+          .replace(/\.[^/.]+$/, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .slice(0, 30);
+        const uniqueFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${cleanBase || 'produit'}.${ext}`;
+
+        if (supabase) {
+          const { data: uploadData, error: uploadErr } = await supabase.storage
+            .from('products')
+            .upload(uniqueFileName, file, {
+              cacheControl: '3600',
+              upsert: false,
+            });
+
+          if (uploadErr) {
+            throw new Error(`Échec du téléversement de "${file.name}" : ${uploadErr.message}`);
+          }
+
+          const { data: publicUrlData } = supabase.storage
+            .from('products')
+            .getPublicUrl(uploadData.path);
+
+          if (publicUrlData?.publicUrl) {
+            uploadedUrls.push(publicUrlData.publicUrl);
+          }
+        } else {
+          // Mode Démo / Hors-ligne : Aperçu immédiat via DataURL
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          uploadedUrls.push(dataUrl);
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        setImages((prev) => [...prev, ...uploadedUrls]);
+        setUploadSuccess(
+          uploadedUrls.length === 1
+            ? '1 image importée et ajoutée au produit avec succès !'
+            : `${uploadedUrls.length} images importées et ajoutées avec succès !`
+        );
+        setTimeout(() => setUploadSuccess(null), 5000);
+      }
+    } catch (err: unknown) {
+      console.error('Erreur import image:', err);
+      setUploadError(
+        err instanceof Error
+          ? err.message
+          : 'Une erreur est survenue lors de l’importation des images.'
+      );
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -444,25 +546,81 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({
                 2. Photographies du Produit
               </h4>
               <span className="text-[11px] text-gray-500">
-                Supporte les URLs web et les images locales <code className="bg-gray-100 text-[#CF7644] px-1 py-0.5 rounded-2xs font-mono">/images/products/...</code>
+                Import direct depuis l'ordinateur ou saisie par URL web
               </span>
             </div>
 
-            <div className="p-3 bg-[#FAF4EF] border border-[#F1D7C5] rounded-xs text-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-gray-800 flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-[#CF7644]" />
-                  <span>Dossier d'images locales créé dans le projet :</span>
-                </span>
-                <span className="font-mono text-[11px] bg-white px-2 py-0.5 rounded border border-[#F1D7C5] text-[#181818]">
-                  /public/images/products/
-                </span>
+            {/* Téléversement direct depuis l'ordinateur vers Supabase Storage 'products' */}
+            <div className="p-4 bg-white border-2 border-dashed border-[#F1D7C5] rounded-xs hover:border-[#CF7644] transition-colors">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp,image/jpg"
+                onChange={handleFileSelect}
+                className="hidden"
+                id="product-image-file-input"
+                disabled={isUploading}
+              />
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-gray-800 flex items-center justify-center sm:justify-start gap-1.5">
+                    <Upload className="w-4 h-4 text-[#CF7644]" />
+                    <span>Importer des photos depuis votre ordinateur</span>
+                  </span>
+                  <p className="text-[11px] text-gray-500">
+                    Formats acceptés : JPG, PNG, WEBP • Sélection multiple • Stockage direct dans le bucket <code className="text-[#CF7644] font-mono font-bold">products</code>
+                  </p>
+                </div>
+
+                <label
+                  htmlFor="product-image-file-input"
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xs text-xs font-bold uppercase tracking-wider text-white shadow-xs cursor-pointer transition-colors shrink-0 ${
+                    isUploading
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-[#CF7644] hover:bg-[#b56133]'
+                  }`}
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Téléversement en cours...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Importer depuis mon ordinateur</span>
+                    </>
+                  )}
+                </label>
               </div>
-              <p className="text-gray-600 text-[11px]">
-                Déposez vos images dans ce dossier (ex: <code>abaya-noir.jpg</code>). Vous pouvez ensuite simplement saisir <code>/images/products/abaya-noir.jpg</code> ci-dessous.
-              </p>
+
+              {/* État de réussite */}
+              {uploadSuccess && (
+                <div className="mt-3 flex items-center gap-2 p-2.5 bg-green-50 border border-green-200 text-green-700 text-xs rounded-xs">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                  <span>{uploadSuccess}</span>
+                </div>
+              )}
+
+              {/* État d'erreur */}
+              {uploadError && (
+                <div className="mt-3 flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xs">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
             </div>
 
+            {/* Séparateur alternatif */}
+            <div className="relative flex items-center justify-center pt-1 pb-1">
+              <div className="border-t border-gray-200 w-full" />
+              <span className="bg-white px-3 text-[10px] uppercase font-bold text-gray-400 tracking-wider absolute">
+                ou ajouter par URL web / chemin local
+              </span>
+            </div>
+
+            {/* Ajout par URL web ou chemin local (conservé intégralement) */}
             <div className="space-y-2">
               <div className="flex gap-2">
                 <input
@@ -475,13 +633,13 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({
                 <button
                   type="button"
                   onClick={handleAddImage}
-                  className="bg-gray-800 text-white px-4 py-2 text-xs font-semibold uppercase tracking-wider rounded-xs hover:bg-[#CF7644] transition-colors"
+                  className="bg-gray-800 text-white px-4 py-2 text-xs font-semibold uppercase tracking-wider rounded-xs hover:bg-[#CF7644] transition-colors shrink-0"
                 >
                   Ajouter Image
                 </button>
               </div>
 
-              {/* Quick insert helper buttons */}
+              {/* Raccourcis rapides */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className="text-[11px] text-gray-500">Raccourcis rapides :</span>
                 <button
@@ -501,27 +659,41 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({
               </div>
             </div>
 
-            {/* Current Images list */}
-            {images.length > 0 && (
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 pt-2">
-                {images.map((imgUrl, idx) => (
-                  <div key={idx} className="relative aspect-3/4 rounded-xs overflow-hidden border border-gray-200 group">
-                    <img src={imgUrl} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveImage(idx)}
-                      className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Supprimer cette photo"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                    {idx === 0 && (
-                      <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1 rounded-2xs">
-                        Principale
-                      </span>
-                    )}
-                  </div>
-                ))}
+            {/* Aperçu immédiat des images importées avec possibilité de retrait avant enregistrement */}
+            {images.length > 0 ? (
+              <div className="space-y-1.5 pt-2">
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span className="font-semibold text-gray-700">
+                    Aperçu des images du produit ({images.length}) :
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    La première photo sera l'image principale affichée en boutique
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 pt-1">
+                  {images.map((imgUrl, idx) => (
+                    <div key={idx} className="relative aspect-3/4 rounded-xs overflow-hidden border border-gray-200 group bg-gray-50 shadow-2xs">
+                      <img src={imgUrl} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(idx)}
+                        className="absolute top-1 right-1 bg-red-600/90 hover:bg-red-700 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-xs"
+                        title="Retirer cette photo du produit"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      {idx === 0 && (
+                        <span className="absolute bottom-1 left-1 bg-black/75 text-white text-[9px] px-1.5 py-0.5 rounded-2xs font-medium">
+                          Principale
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 text-center border border-dashed border-gray-200 rounded-xs bg-gray-50/50">
+                <p className="text-xs text-gray-400">Aucune photo ajoutée pour le moment.</p>
               </div>
             )}
           </div>
