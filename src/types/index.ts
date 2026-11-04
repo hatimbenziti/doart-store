@@ -76,6 +76,13 @@ export interface Order {
   items?: OrderItem[];
 }
 
+export interface InstagramPost {
+  id: string;
+  image_url: string;
+  post_url?: string;
+  tag?: string;
+}
+
 export interface StoreSettings {
   id: string;
   store_name: string;
@@ -90,13 +97,15 @@ export interface StoreSettings {
   hero_subtitle?: string;
   hero_badge?: string;
   hero_image?: string;
-  hero_tag_badge?: string; // "Casablanca Atelier"
+  hero_tag_badge?: string; // "Casablanca Atelier" / "Marrakech Atelier"
   hero_card_tag?: string; // "Best-Seller"
   hero_card_title?: string;
   hero_card_price?: string;
   hero_card_original_price?: string;
   hero_card_image?: string;
   hero_featured_product_id?: string;
+  // Instagram Community Section
+  instagram_posts?: InstagramPost[];
 }
 
 export interface CartItem {

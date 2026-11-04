@@ -282,7 +282,10 @@ export default function App() {
                   </section>
 
                   {/* Instagram Community Section */}
-                  <InstagramSection />
+                  <InstagramSection
+                    posts={settings?.instagram_posts}
+                    instagramUrl={settings?.instagram_url}
+                  />
                 </div>
               )}
 

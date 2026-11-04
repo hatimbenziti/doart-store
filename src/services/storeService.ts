@@ -7,11 +7,13 @@ import {
   StoreSettings,
   OrderStatus,
   CreateOrderParams,
+  InstagramPost,
 } from '../types';
 import {
   INITIAL_CATEGORIES,
   INITIAL_PRODUCTS,
   INITIAL_SETTINGS,
+  INITIAL_INSTAGRAM_POSTS,
   generateUUID,
 } from '../data/mockData';
 
@@ -21,6 +23,7 @@ const LOCAL_STORAGE_KEYS = {
   VARIANTS: 'doart_variants_v2',
   ORDERS: 'doart_orders_v2',
   SETTINGS: 'doart_settings_v2',
+  INSTAGRAM_POSTS: 'doart_instagram_posts_v2',
 };
 
 // UUID validation helper
@@ -56,6 +59,9 @@ function initializeLocalStorage() {
   }
   if (!localStorage.getItem(LOCAL_STORAGE_KEYS.SETTINGS)) {
     localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
+  }
+  if (!localStorage.getItem(LOCAL_STORAGE_KEYS.INSTAGRAM_POSTS)) {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.INSTAGRAM_POSTS, JSON.stringify(INITIAL_INSTAGRAM_POSTS));
   }
 }
 
@@ -585,6 +591,38 @@ export async function updateOrderCustomer(
 }
 
 // ==========================================
+// INSTAGRAM GALLERY POSTS
+// ==========================================
+export async function getInstagramPosts(): Promise<InstagramPost[]> {
+  const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.INSTAGRAM_POSTS);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {
+      // fallback
+    }
+  }
+  return INITIAL_INSTAGRAM_POSTS;
+}
+
+export async function saveInstagramPosts(posts: InstagramPost[]): Promise<InstagramPost[]> {
+  localStorage.setItem(LOCAL_STORAGE_KEYS.INSTAGRAM_POSTS, JSON.stringify(posts));
+  try {
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.SETTINGS);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      parsed.instagram_posts = posts;
+      localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(parsed));
+    }
+  } catch {
+    // ignore
+  }
+  window.dispatchEvent(new Event('doart_instagram_posts_changed'));
+  return posts;
+}
+
+// ==========================================
 // STORE SETTINGS
 // ==========================================
 export async function getStoreSettings(): Promise<StoreSettings> {
@@ -596,6 +634,9 @@ export async function getStoreSettings(): Promise<StoreSettings> {
       if (!dbSettings.whatsapp_number || dbSettings.whatsapp_number === '212661000000') {
         dbSettings.whatsapp_number = '212705176222';
       }
+      if (!dbSettings.instagram_posts || dbSettings.instagram_posts.length === 0) {
+        dbSettings.instagram_posts = await getInstagramPosts();
+      }
       return dbSettings;
     }
   }
@@ -606,14 +647,20 @@ export async function getStoreSettings(): Promise<StoreSettings> {
       const parsed = JSON.parse(stored) as StoreSettings;
       if (!parsed.whatsapp_number || parsed.whatsapp_number === '212661000000') {
         parsed.whatsapp_number = '212705176222';
-        localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(parsed));
       }
+      if (!parsed.instagram_posts || parsed.instagram_posts.length === 0) {
+        parsed.instagram_posts = await getInstagramPosts();
+      }
+      localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(parsed));
       return parsed;
     } catch {
       // fallback
     }
   }
-  return INITIAL_SETTINGS;
+  return {
+    ...INITIAL_SETTINGS,
+    instagram_posts: await getInstagramPosts(),
+  };
 }
 
 export interface BatchVariantStockUpdate {
@@ -869,6 +916,10 @@ export async function updateStoreSettings(settings: Partial<StoreSettings>): Pro
     }
   }
 
+  if (updated.instagram_posts && Array.isArray(updated.instagram_posts)) {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.INSTAGRAM_POSTS, JSON.stringify(updated.instagram_posts));
+  }
   localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+  window.dispatchEvent(new Event('doart_instagram_posts_changed'));
   return updated;
 }

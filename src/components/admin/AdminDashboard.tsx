@@ -26,6 +26,11 @@ import {
   Image as ImageIcon,
   Upload,
   Loader2,
+  Instagram,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+  Link as LinkIcon,
 } from 'lucide-react';
 import {
   Product,
@@ -34,6 +39,7 @@ import {
   StoreSettings,
   OrderStatus,
   ProductVariant,
+  InstagramPost,
 } from '../../types';
 import {
   getProducts,
@@ -47,7 +53,10 @@ import {
   updateOrderStatus,
   updateOrderCustomer,
   updateStoreSettings,
+  getInstagramPosts,
+  saveInstagramPosts,
 } from '../../services/storeService';
+import { INITIAL_INSTAGRAM_POSTS } from '../../data/mockData';
 import { isSupabaseConnected, getSupabaseClient } from '../../lib/supabase';
 import { normalizeWhatsAppNumber } from '../../utils/whatsapp';
 import { AdminProductModal } from './AdminProductModal';
@@ -61,7 +70,7 @@ interface AdminDashboardProps {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'products' | 'categories' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'products' | 'categories' | 'instagram' | 'settings'>('overview');
 
   // Data states
   const [products, setProducts] = useState<Product[]>([]);
@@ -111,6 +120,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [settingsThreshold, setSettingsThreshold] = useState(600);
   const [settingsSavedMessage, setSettingsSavedMessage] = useState(false);
 
+  // Instagram states
+  const [instagramPosts, setInstagramPosts] = useState<InstagramPost[]>([]);
+  const [isSavingInstagram, setIsSavingInstagram] = useState(false);
+  const [instagramSaveMessage, setInstagramSaveMessage] = useState<string | null>(null);
+  const [uploadingPostIdx, setUploadingPostIdx] = useState<number | null>(null);
+
   // Hero Showcase states (photo, badge, floating product card)
   const [heroImage, setHeroImage] = useState('');
   const [heroTagBadge, setHeroTagBadge] = useState('Casablanca Atelier');
@@ -157,6 +172,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       setSettingsInstagram(sets.instagram_url);
       setSettingsDeliveryFee(sets.delivery_fee);
       setSettingsThreshold(sets.free_delivery_threshold);
+
+      // Instagram posts
+      if (sets.instagram_posts && sets.instagram_posts.length > 0) {
+        setInstagramPosts(sets.instagram_posts);
+      } else {
+        const fallbackPosts = await getInstagramPosts();
+        setInstagramPosts(fallbackPosts);
+      }
 
       // Hero settings
       setHeroImage(sets.hero_image || 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1000&q=85');
@@ -470,6 +493,116 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     }
   };
 
+  // Instagram Gallery Handlers
+  const handleAddInstagramPost = () => {
+    const newPost: InstagramPost = {
+      id: `post-${Date.now()}`,
+      image_url: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&q=80',
+      post_url: settingsInstagram || 'https://instagram.com/doartstore',
+      tag: '#DoArtStore',
+    };
+    setInstagramPosts((prev) => [...prev, newPost]);
+  };
+
+  const handleRemoveInstagramPost = (index: number) => {
+    setInstagramPosts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMoveInstagramPost = (index: number, direction: 'up' | 'down') => {
+    setInstagramPosts((prev) => {
+      const next = [...prev];
+      const targetIdx = direction === 'up' ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= next.length) return prev;
+      const temp = next[index];
+      next[index] = next[targetIdx];
+      next[targetIdx] = temp;
+      return next;
+    });
+  };
+
+  const handleUpdateInstagramPost = (index: number, field: keyof InstagramPost, value: string) => {
+    setInstagramPosts((prev) => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = { ...next[index], [field]: value };
+      }
+      return next;
+    });
+  };
+
+  const handleUploadInstagramPostImage = async (index: number, file: File) => {
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      alert('Format non supporté. Veuillez sélectionner une image JPG, PNG ou WEBP.');
+      return;
+    }
+
+    setUploadingPostIdx(index);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const cleanBase = file.name
+        .replace(/\.[^/.]+$/, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .slice(0, 30);
+      const fileName = `settings/instagram/${Date.now()}_${cleanBase}.${ext}`;
+
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: uploadData, error: upErr } = await supabase.storage
+          .from('products')
+          .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+        if (upErr) throw new Error(upErr.message);
+
+        const { data: publicUrlData } = supabase.storage
+          .from('products')
+          .getPublicUrl(uploadData.path);
+
+        if (publicUrlData?.publicUrl) {
+          handleUpdateInstagramPost(index, 'image_url', publicUrlData.publicUrl);
+        }
+      } else {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        handleUpdateInstagramPost(index, 'image_url', dataUrl);
+      }
+    } catch (err: unknown) {
+      console.error('Erreur import image instagram:', err);
+      alert('Erreur lors du téléversement de l\'image.');
+    } finally {
+      setUploadingPostIdx(null);
+    }
+  };
+
+  const handleSaveInstagram = async () => {
+    setIsSavingInstagram(true);
+    try {
+      await saveInstagramPosts(instagramPosts);
+      await updateStoreSettings({
+        instagram_posts: instagramPosts,
+        instagram_url: settingsInstagram.trim(),
+      });
+      setInstagramSaveMessage('Galerie Instagram mise à jour avec succès !');
+      setTimeout(() => setInstagramSaveMessage(null), 4000);
+    } catch (err) {
+      console.error('Erreur sauvegarde instagram:', err);
+      alert('Erreur lors de la sauvegarde de la galerie Instagram.');
+    } finally {
+      setIsSavingInstagram(false);
+    }
+  };
+
+  const handleResetInstagramPosts = () => {
+    if (confirm('Voulez-vous réinitialiser la galerie avec les photos par défaut ?')) {
+      setInstagramPosts(INITIAL_INSTAGRAM_POSTS);
+    }
+  };
+
   // Settings Save (WhatsApp, Delivery & Hero Showcase Visuals)
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -538,7 +671,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
             <div className="flex items-center gap-3">
               <img
-                src="/images/banners/Dologo-01.png"
+                src="/assets/aistudio/DologO Officiel.png"
                 alt="DoArt Store Logo"
                 className="h-8 w-auto object-contain"
               />
@@ -580,6 +713,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
             { id: 'orders', label: `Commandes (${orders.length})`, icon: ShoppingBag },
             { id: 'products', label: `Produits (${products.length})`, icon: Package },
             { id: 'categories', label: `Catégories (${categories.length})`, icon: FolderTree },
+            { id: 'instagram', label: `Instagram (${instagramPosts.length})`, icon: Instagram },
             { id: 'settings', label: 'Paramètres & WhatsApp', icon: Settings },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -1155,7 +1289,391 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         )}
 
         {/* ============================================================== */}
-        {/* TAB 5: SETTINGS */}
+        {/* TAB 5: INSTAGRAM GALLERY MANAGEMENT */}
+        {/* ============================================================== */}
+        {activeTab === 'instagram' && (
+          <div className="space-y-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 text-[#CF7644] text-xs font-bold uppercase tracking-widest mb-1">
+                  <Instagram className="w-4 h-4" />
+                  <span>Vitrine Réseaux Sociaux</span>
+                </div>
+                <h2 className="font-serif text-2xl font-bold text-[#181818]">
+                  Gestion de la Galerie Instagram
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Importez vos propres photos, ordonnez les visuels et liez chaque image directement à sa publication Instagram.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetInstagramPosts}
+                  className="px-3.5 py-2 border border-gray-300 text-gray-600 hover:text-black hover:border-gray-400 text-xs font-medium rounded-xs flex items-center gap-1.5 transition-colors bg-white shadow-2xs"
+                  title="Restaurer les visuels d'origine"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Réinitialiser</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAddInstagramPost}
+                  className="bg-[#181818] hover:bg-[#333333] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xs flex items-center gap-1.5 transition-colors shadow-2xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Ajouter une photo</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSavingInstagram}
+                  onClick={handleSaveInstagram}
+                  className="bg-[#CF7644] hover:bg-[#b66133] disabled:bg-gray-400 text-white px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-xs flex items-center gap-2 transition-colors shadow-xs"
+                >
+                  {isSavingInstagram ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Enregistrement...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Sauvegarder la galerie</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {instagramSaveMessage && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xs flex items-center gap-2 text-xs shadow-2xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="font-medium">{instagramSaveMessage}</span>
+              </div>
+            )}
+
+            {/* Profil Instagram & Configuration Globale */}
+            <div className="bg-white p-5 border border-gray-200 rounded-xs shadow-2xs space-y-4">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-800">
+                  <Instagram className="w-4 h-4 text-[#CF7644]" />
+                  <span>Lien Profil Instagram de la Boutique</span>
+                </div>
+                <span className="text-[11px] text-gray-400">Bouton « Suivre sur Instagram »</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                <div className="sm:col-span-8">
+                  <input
+                    type="url"
+                    value={settingsInstagram}
+                    onChange={(e) => setSettingsInstagram(e.target.value)}
+                    placeholder="https://instagram.com/doartstore"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xs bg-white focus:outline-none focus:border-[#CF7644] font-mono"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Ce lien sera utilisé pour le profil officiel ainsi que comme lien de secours si un post individuel n'a pas d'URL spécifique.
+                  </p>
+                </div>
+                <div className="sm:col-span-4 flex items-center gap-2">
+                  <a
+                    href={settingsInstagram || 'https://instagram.com/doartstore'}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 text-gray-700 hover:border-[#CF7644] hover:text-[#CF7644] rounded-xs text-xs font-medium bg-[#FAF4EF]/40 transition-colors"
+                  >
+                    <span>Ouvrir le profil</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Liste des publications Instagram */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs uppercase tracking-wider font-bold text-gray-700">
+                  Photos affichées dans la galerie ({instagramPosts.length} visuels)
+                </h3>
+                <span className="text-[11px] text-gray-500">
+                  Recommandé : 6 photos carrées (ratio 1:1)
+                </span>
+              </div>
+
+              {instagramPosts.length === 0 ? (
+                <div className="bg-white p-12 text-center border-2 border-dashed border-gray-300 rounded-xs space-y-3">
+                  <Instagram className="w-10 h-10 text-gray-300 mx-auto" />
+                  <p className="text-sm font-medium text-gray-600">
+                    Aucune photo dans la galerie Instagram.
+                  </p>
+                  <button
+                    onClick={handleAddInstagramPost}
+                    className="bg-[#CF7644] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xs hover:bg-[#b66133]"
+                  >
+                    Ajouter votre première photo
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {instagramPosts.map((post, index) => {
+                    const isUploadingThis = uploadingPostIdx === index;
+
+                    return (
+                      <div
+                        key={post.id || index}
+                        className="bg-white border border-gray-200 rounded-xs shadow-2xs p-4 flex flex-col justify-between space-y-4 relative group hover:border-[#CF7644]/60 transition-colors"
+                      >
+                        {/* En-tête de la carte avec index et actions d'ordre */}
+                        <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                            <span className="w-5 h-5 rounded-full bg-[#FAF4EF] text-[#CF7644] flex items-center justify-center font-mono text-[10px] font-bold">
+                              {index + 1}
+                            </span>
+                            <span>Position {index + 1}</span>
+                          </span>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={index === 0}
+                              onClick={() => handleMoveInstagramPost(index, 'up')}
+                              className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 transition-colors rounded-xs"
+                              title="Déplacer vers la gauche"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={index === instagramPosts.length - 1}
+                              onClick={() => handleMoveInstagramPost(index, 'down')}
+                              className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 transition-colors rounded-xs"
+                              title="Déplacer vers la droite"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveInstagramPost(index)}
+                              className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded-xs ml-1"
+                              title="Supprimer cette photo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Image Preview & Upload Controls */}
+                        <div className="flex gap-3 items-start">
+                          <div className="w-24 h-24 aspect-square rounded-xs overflow-hidden bg-gray-100 border border-gray-200 shrink-0 relative group/img shadow-2xs">
+                            <img
+                              src={post.image_url}
+                              alt={`Instagram preview ${index + 1}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src =
+                                  'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=300&q=80';
+                              }}
+                            />
+                            {isUploadingThis && (
+                              <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white">
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex-1 space-y-2">
+                            {/* Upload local image input */}
+                            <div>
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/jpg"
+                                id={`insta-file-upload-${index}`}
+                                className="hidden"
+                                disabled={isUploadingThis}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleUploadInstagramPostImage(index, file);
+                                }}
+                              />
+                              <label
+                                htmlFor={`insta-file-upload-${index}`}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-[#CF7644] text-[#CF7644] hover:bg-[#CF7644] hover:text-white rounded-xs text-[11px] font-semibold uppercase tracking-wider cursor-pointer transition-colors shadow-2xs w-full justify-center"
+                              >
+                                <Upload className="w-3 h-3" />
+                                <span>Importer image</span>
+                              </label>
+                            </div>
+
+                            {/* Manual URL input */}
+                            <div>
+                              <label className="text-[10px] text-gray-500 font-semibold block mb-0.5">
+                                Ou URL de l'image :
+                              </label>
+                              <input
+                                type="text"
+                                value={post.image_url}
+                                onChange={(e) =>
+                                  handleUpdateInstagramPost(index, 'image_url', e.target.value)
+                                }
+                                placeholder="https://images.unsplash..."
+                                className="w-full px-2 py-1 text-[11px] border border-gray-300 rounded-xs bg-white font-mono"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Instagram Post Link and Tag */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100 text-xs">
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[11px] font-semibold text-gray-700 flex items-center gap-1">
+                                <LinkIcon className="w-3 h-3 text-[#CF7644]" />
+                                <span>Lien du post Instagram :</span>
+                              </label>
+                              {post.post_url && (
+                                <a
+                                  href={post.post_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-[#CF7644] hover:underline flex items-center gap-0.5 font-medium"
+                                  title="Tester le lien dans un nouvel onglet"
+                                >
+                                  <span>Tester ↗</span>
+                                </a>
+                              )}
+                            </div>
+                            <input
+                              type="url"
+                              value={post.post_url || ''}
+                              onChange={(e) =>
+                                handleUpdateInstagramPost(index, 'post_url', e.target.value)
+                              }
+                              placeholder="https://www.instagram.com/p/C_abc123/"
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs text-xs bg-white focus:outline-none focus:border-[#CF7644] font-mono"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              En cliquant sur cette photo dans la boutique, le visiteur sera redirigé vers ce post.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-semibold text-gray-700 block mb-1">
+                              Hashtag ou légende (overlay au survol) :
+                            </label>
+                            <input
+                              type="text"
+                              value={post.tag || ''}
+                              onChange={(e) =>
+                                handleUpdateInstagramPost(index, 'tag', e.target.value)
+                              }
+                              placeholder="ex: #DoArtMarrakech ou #DoArtStyle"
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs text-xs bg-white focus:outline-none focus:border-[#CF7644]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Aperçu en direct de la vitrine */}
+            <div className="bg-white p-6 border border-[#F1D7C5] rounded-xs shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-[#CF7644]" />
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-[#181818]">
+                    Aperçu en direct sur la boutique
+                  </h3>
+                </div>
+                <span className="text-[11px] text-gray-400">
+                  Les photos ci-dessous sont cliquables avec vos liens
+                </span>
+              </div>
+
+              {/* Simulation exacte de la section storefront */}
+              <div className="p-4 bg-[#FAF4EF]/60 rounded-xs border border-[#F1D7C5]/40 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#CF7644] flex items-center gap-1.5">
+                      <Instagram className="w-3.5 h-3.5" />
+                      <span>Rejoignez la communauté</span>
+                    </span>
+                    <h4 className="font-serif text-lg font-bold text-[#181818]">
+                      @{settingsInstagram ? settingsInstagram.replace(/\/+$/, '').split('/').pop() : 'doartstore'} sur Instagram
+                    </h4>
+                  </div>
+                  <a
+                    href={settingsInstagram || 'https://instagram.com/doartstore'}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] font-semibold uppercase tracking-wider border border-[#CF7644] text-[#CF7644] px-3 py-1.5 rounded-xs bg-white"
+                  >
+                    Suivre sur Instagram ↗
+                  </a>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                  {instagramPosts.map((post, idx) => (
+                    <a
+                      key={post.id || idx}
+                      href={post.post_url || settingsInstagram || 'https://instagram.com/doartstore'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative aspect-square overflow-hidden bg-gray-200 rounded-xs shadow-2xs block"
+                    >
+                      <img
+                        src={post.image_url}
+                        alt={`Look ${idx + 1}`}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center p-1.5 text-white text-center">
+                        <Instagram className="w-5 h-5 mb-1 text-[#F1D7C5]" />
+                        {post.tag && (
+                          <span className="text-[9px] font-mono tracking-wider truncate max-w-full">
+                            {post.tag}
+                          </span>
+                        )}
+                        <span className="text-[8px] uppercase tracking-wider bg-white/20 px-1.5 py-0.5 rounded-full mt-1">
+                          Lien actif ↗
+                        </span>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bouton de sauvegarde final */}
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  disabled={isSavingInstagram}
+                  onClick={handleSaveInstagram}
+                  className="bg-[#CF7644] hover:bg-[#b66133] disabled:bg-gray-400 text-white px-8 py-3 text-xs font-bold uppercase tracking-wider rounded-xs transition-colors shadow-md flex items-center gap-2"
+                >
+                  {isSavingInstagram ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Enregistrement...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Enregistrer la Galerie Instagram</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 6: SETTINGS */}
         {/* ============================================================== */}
         {activeTab === 'settings' && (
           <div className="max-w-3xl space-y-8">

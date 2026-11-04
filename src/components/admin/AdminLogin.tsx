@@ -96,7 +96,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onExit }) => 
     <div className="min-h-screen bg-[#FAF4EF] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center flex flex-col items-center">
         <img
-          src="/images/banners/Dologo-01.png"
+          src="/assets/aistudio/DologO Officiel.png"
           alt="DoArt Store Logo"
           className="h-16 w-auto object-contain mx-auto mb-2"
         />

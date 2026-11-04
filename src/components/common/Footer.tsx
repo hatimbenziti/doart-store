@@ -63,13 +63,16 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, whatsappNumber = '21
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-1 md:grid-cols-12 gap-10">
         {/* Brand identity */}
         <div className="md:col-span-4 space-y-4">
-          <div>
-            <h3 className="font-serif text-2xl tracking-[0.25em] font-semibold text-white">
-              DOART STORE
-            </h3>
-            <p className="text-[10px] uppercase tracking-[0.4em] text-[#CF7644] font-medium">
-              Casablanca • Maroc
-            </p>
+          <div
+            onClick={() => onNavigate('home')}
+            className="cursor-pointer inline-block group select-none"
+            title="Accueil DoArt Store"
+          >
+            <img
+              src="/assets/aistudio/logo white.png"
+              alt="DoArt Store Logo"
+              className="h-10 sm:h-12 w-auto object-contain group-hover:opacity-90 transition-opacity"
+            />
           </div>
           <p className="text-xs text-gray-400 leading-relaxed max-w-sm">
             Maison de prêt-à-porter contemporain et minimaliste. Nous concevons des pièces haut de gamme taillées dans des étoffes sélectionnées avec exigence, pour sublimer votre allure avec élégance et simplicité.
@@ -173,12 +176,12 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, whatsappNumber = '21
         {/* Contact Morocco */}
         <div className="md:col-span-3 space-y-3">
           <h4 className="text-white text-xs font-bold uppercase tracking-widest">
-            Atelier Casablanca
+            DoArt Studio Marrakech
           </h4>
           <div className="space-y-2.5 text-xs text-gray-400">
             <p className="flex items-start gap-2">
               <MapPin className="w-4 h-4 text-[#CF7644] shrink-0 mt-0.5" />
-              <span>Boulevard d'Anfa, Maarif, Casablanca, Maroc</span>
+              <span>Marrakech, Maroc</span>
             </p>
             <p className="flex items-center gap-2">
               <Phone className="w-4 h-4 text-[#CF7644] shrink-0" />
@@ -194,7 +197,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, whatsappNumber = '21
             </p>
             <p className="flex items-center gap-2">
               <Mail className="w-4 h-4 text-[#CF7644] shrink-0" />
-              <span>contact@doartstore.ma</span>
+              <a
+                href="mailto:doart.store.ma@gmail.com"
+                className="hover:text-white transition-colors"
+                title="Envoyer un e-mail"
+              >
+                doart.store.ma@gmail.com
+              </a>
             </p>
           </div>
         </div>
@@ -206,7 +215,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, whatsappNumber = '21
         <p className="flex items-center gap-1.5">
           <span>Créé avec élégance au Maroc</span>
           <Heart className="w-3.5 h-3.5 text-[#CF7644] fill-[#CF7644]" />
-          <span>• Casablanca</span>
+          <span>• Marrakech</span>
         </p>
       </div>
     </footer>

@@ -1,33 +1,47 @@
-import React from 'react';
-import { Instagram, ArrowUpRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Instagram, ArrowUpRight, ExternalLink } from 'lucide-react';
+import { InstagramPost } from '../../types';
+import { getInstagramPosts } from '../../services/storeService';
+import { INITIAL_INSTAGRAM_POSTS } from '../../data/mockData';
 
-export const InstagramSection: React.FC = () => {
-  const instaPosts = [
-    {
-      img: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&q=80',
-      tag: '#DoArtCasablanca',
-    },
-    {
-      img: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&q=80',
-      tag: '#MinimalistMorocco',
-    },
-    {
-      img: 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&w=600&q=80',
-      tag: '#DoArtStyle',
-    },
-    {
-      img: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=80',
-      tag: '#SabraVibes',
-    },
-    {
-      img: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80',
-      tag: '#TracksuitLife',
-    },
-    {
-      img: 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=600&q=80',
-      tag: '#DoArtStore',
-    },
-  ];
+interface InstagramSectionProps {
+  posts?: InstagramPost[];
+  instagramUrl?: string;
+}
+
+export const InstagramSection: React.FC<InstagramSectionProps> = ({
+  posts: propPosts,
+  instagramUrl = 'https://instagram.com/doartstore',
+}) => {
+  const [posts, setPosts] = useState<InstagramPost[]>(() => {
+    if (propPosts && propPosts.length > 0) return propPosts;
+    return INITIAL_INSTAGRAM_POSTS;
+  });
+
+  useEffect(() => {
+    if (propPosts && propPosts.length > 0) {
+      setPosts(propPosts);
+      return;
+    }
+    const load = async () => {
+      const data = await getInstagramPosts();
+      if (data && data.length > 0) {
+        setPosts(data);
+      }
+    };
+    load();
+
+    const handleUpdate = () => {
+      load();
+    };
+    window.addEventListener('doart_instagram_posts_changed', handleUpdate);
+    return () => {
+      window.removeEventListener('doart_instagram_posts_changed', handleUpdate);
+    };
+  }, [propPosts]);
+
+  // Extract Instagram username from URL (e.g. "doartstore")
+  const username = instagramUrl.replace(/\/+$/, '').split('/').pop() || 'doartstore';
 
   return (
     <section className="bg-[#FAF4EF]/50 py-16 sm:py-20 border-t border-[#F1D7C5]/40">
@@ -39,11 +53,11 @@ export const InstagramSection: React.FC = () => {
               <span>Rejoignez la communauté</span>
             </div>
             <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#181818]">
-              @doartstore sur Instagram
+              @{username} sur Instagram
             </h2>
           </div>
           <a
-            href="https://instagram.com/doartstore"
+            href={instagramUrl}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 border border-[#CF7644] text-[#CF7644] hover:bg-[#CF7644] hover:text-white px-5 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors rounded-xs shadow-xs"
@@ -53,25 +67,41 @@ export const InstagramSection: React.FC = () => {
           </a>
         </div>
 
-        {/* 6-grid photos */}
+        {/* Responsive Grid Photos */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-          {instaPosts.map((post, idx) => (
-            <div
-              key={idx}
-              className="group relative aspect-square overflow-hidden bg-gray-200 rounded-xs shadow-xs"
-            >
-              <img
-                src={post.img}
-                alt={`Instagram look ${idx + 1}`}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center p-2 text-white text-center">
-                <Instagram className="w-6 h-6 mb-1 text-[#F1D7C5]" />
-                <span className="text-[10px] font-mono tracking-wider">{post.tag}</span>
-              </div>
-            </div>
-          ))}
+          {posts.map((post, idx) => {
+            const targetUrl = post.post_url && post.post_url.trim() ? post.post_url.trim() : instagramUrl;
+
+            return (
+              <a
+                key={post.id || idx}
+                href={targetUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Voir le post Instagram ${post.tag || ''}`}
+                className="group relative aspect-square overflow-hidden bg-gray-200 rounded-xs shadow-xs block cursor-pointer"
+              >
+                <img
+                  src={post.image_url}
+                  alt={`Instagram look ${idx + 1}`}
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center p-2 text-white text-center">
+                  <Instagram className="w-6 h-6 mb-1 text-[#F1D7C5]" />
+                  {post.tag && (
+                    <span className="text-[10px] font-mono tracking-wider max-w-full truncate px-1">
+                      {post.tag}
+                    </span>
+                  )}
+                  <span className="mt-2 inline-flex items-center gap-1 text-[9px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full text-[#F1D7C5] font-semibold">
+                    <span>Voir le post</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </span>
+                </div>
+              </a>
+            );
+          })}
         </div>
       </div>
     </section>

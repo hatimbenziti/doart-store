@@ -1,4 +1,4 @@
-import { Category, Product, StoreSettings } from '../types';
+import { Category, Product, StoreSettings, InstagramPost } from '../types';
 
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -196,6 +196,45 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
 ];
 
+export const INITIAL_INSTAGRAM_POSTS: InstagramPost[] = [
+  {
+    id: 'post-1',
+    image_url: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&q=80',
+    post_url: 'https://instagram.com/doartstore',
+    tag: '#DoArtMarrakech',
+  },
+  {
+    id: 'post-2',
+    image_url: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&q=80',
+    post_url: 'https://instagram.com/doartstore',
+    tag: '#MinimalistMorocco',
+  },
+  {
+    id: 'post-3',
+    image_url: 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&w=600&q=80',
+    post_url: 'https://instagram.com/doartstore',
+    tag: '#DoArtStyle',
+  },
+  {
+    id: 'post-4',
+    image_url: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=80',
+    post_url: 'https://instagram.com/doartstore',
+    tag: '#SabraVibes',
+  },
+  {
+    id: 'post-5',
+    image_url: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80',
+    post_url: 'https://instagram.com/doartstore',
+    tag: '#TracksuitLife',
+  },
+  {
+    id: 'post-6',
+    image_url: 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=600&q=80',
+    post_url: 'https://instagram.com/doartstore',
+    tag: '#DoArtStore',
+  },
+];
+
 export const INITIAL_SETTINGS: StoreSettings = {
   id: 'c0000001-0000-4000-8000-000000000001',
   store_name: 'DoArt Store',
@@ -210,13 +249,14 @@ export const INITIAL_SETTINGS: StoreSettings = {
   hero_subtitle: 'Des coupes contemporaines, des matières nobles et une fabrication soignée. Découvrez la garde-robe DoArt Store avec paiement à la livraison partout au Maroc.',
   hero_badge: 'Nouvelle Collection 2026 • DoArt Studio',
   hero_image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1000&q=85',
-  hero_tag_badge: 'Casablanca Atelier',
+  hero_tag_badge: 'Marrakech Atelier',
   hero_card_tag: 'Best-Seller',
   hero_card_title: 'Tracksuit Signature DoArt',
   hero_card_price: '520 DH',
   hero_card_original_price: '650 DH',
   hero_card_image: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=300&q=80',
   hero_featured_product_id: 'f0000001-0000-4000-8000-000000000001',
+  instagram_posts: INITIAL_INSTAGRAM_POSTS,
 };
 
 export const MOROCCAN_CITIES = [

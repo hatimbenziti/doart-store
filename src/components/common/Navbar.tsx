@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Search, Menu, X, ShieldCheck, PhoneCall, Sparkles } from 'lucide-react';
+import { ShoppingBag, Search, Menu, X, PhoneCall, Sparkles } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 
 interface NavbarProps {
@@ -34,9 +34,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onOpenS
       </div>
 
       {/* Main Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-        {/* Left: Mobile Menu Trigger & Desktop Nav */}
-        <div className="flex items-center gap-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between relative">
+        {/* 1. Left: Brand Logo (and mobile menu toggle on small screens) */}
+        <div className="flex items-center gap-3 z-10">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden p-2 -ml-2 text-[#181818] hover:text-[#CF7644] transition-colors"
@@ -45,38 +45,45 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onOpenS
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
 
-          <nav className="hidden md:flex items-center space-x-8 text-sm uppercase tracking-widest font-medium">
-            {navLinks.map((link, idx) => (
+          <div
+            className="flex items-center cursor-pointer select-none py-1 group"
+            onClick={() => handleLinkClick('home')}
+            title="Accueil DoArt Store"
+          >
+            <img
+              src="/assets/aistudio/DologO Officiel.png"
+              alt="DoArt Studio Store"
+              className="h-10 sm:h-12 md:h-13 w-auto object-contain group-hover:opacity-90 transition-opacity"
+            />
+          </div>
+        </div>
+
+        {/* 2. Center: Desktop Navigation Links (Horizontally Centered) */}
+        <nav className="hidden md:flex items-center justify-center absolute left-1/2 -translate-x-1/2 space-x-8 text-sm uppercase tracking-widest font-medium pointer-events-auto">
+          {navLinks.map((link, idx) => {
+            const isActive =
+              currentView === link.view &&
+              (!link.params || link.params.filter === undefined);
+
+            return (
               <button
                 key={idx}
                 onClick={() => handleLinkClick(link.view, link.params)}
-                className={`transition-colors hover:text-[#CF7644] relative py-1 ${
-                  currentView === link.view && (!link.params || link.params.filter === undefined)
-                    ? 'text-[#CF7644] font-semibold'
-                    : 'text-[#181818]'
+                className={`transition-colors hover:text-[#CF7644] relative py-1 text-sm tracking-widest ${
+                  isActive ? 'text-[#CF7644] font-semibold' : 'text-[#181818]'
                 }`}
               >
                 {link.label}
+                {isActive && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#CF7644] rounded-full" />
+                )}
               </button>
-            ))}
-          </nav>
-        </div>
+            );
+          })}
+        </nav>
 
-        {/* Center: Brand Logo */}
-        <div
-          className="flex items-center justify-center cursor-pointer select-none py-1 group"
-          onClick={() => handleLinkClick('home')}
-          title="Accueil DoArt Store"
-        >
-          <img
-            src="/images/banners/Dologo-01.png"
-            alt="DoArt Studio Store"
-            className="h-10 sm:h-12 md:h-13 w-auto object-contain group-hover:opacity-90 transition-opacity"
-          />
-        </div>
-
-        {/* Right: Actions (Search, Admin, Cart) */}
-        <div className="flex items-center gap-2 sm:gap-4">
+        {/* 3. Right: Actions (Search and Cart only) */}
+        <div className="flex items-center gap-1 sm:gap-3 z-10">
           <button
             onClick={onOpenSearch}
             className="p-2 text-[#181818] hover:text-[#CF7644] transition-colors rounded-full hover:bg-[#FAF4EF]"
@@ -86,21 +93,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onOpenS
             <Search className="w-5 h-5" />
           </button>
 
-          {/* Admin link button */}
-          <button
-            onClick={() => handleLinkClick('admin')}
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border transition-all ${
-              currentView === 'admin'
-                ? 'bg-[#CF7644] text-white border-[#CF7644]'
-                : 'border-[#F1D7C5] text-[#555555] hover:border-[#CF7644] hover:text-[#CF7644] bg-[#FAF4EF]/50'
-            }`}
-            title="Espace Administration"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span className="font-medium">Admin</span>
-          </button>
-
-          {/* Cart Trigger */}
           <button
             onClick={openCart}
             className="p-2 relative text-[#181818] hover:text-[#CF7644] transition-colors rounded-full hover:bg-[#FAF4EF]"
@@ -130,13 +122,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onOpenS
                 {link.label}
               </button>
             ))}
-            <button
-              onClick={() => handleLinkClick('admin')}
-              className="flex items-center gap-2 text-left text-sm font-medium uppercase tracking-wider py-2 text-[#CF7644]"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Espace Administration</span>
-            </button>
           </div>
 
           <div className="pt-4 border-t border-gray-100 text-xs text-gray-500 space-y-2">
