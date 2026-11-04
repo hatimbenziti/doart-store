@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -24,6 +24,8 @@ import {
   TrendingUp,
   Save,
   Image as ImageIcon,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import {
   Product,
@@ -46,7 +48,7 @@ import {
   updateOrderCustomer,
   updateStoreSettings,
 } from '../../services/storeService';
-import { isSupabaseConnected } from '../../lib/supabase';
+import { isSupabaseConnected, getSupabaseClient } from '../../lib/supabase';
 import { normalizeWhatsAppNumber } from '../../utils/whatsapp';
 import { AdminProductModal } from './AdminProductModal';
 import { AdminOrderDetailsModal } from './AdminOrderDetailsModal';
@@ -121,6 +123,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [heroTitle, setHeroTitle] = useState('L’Élégance Minimaliste Inspirée par le Maroc.');
   const [heroSubtitle, setHeroSubtitle] = useState('');
   const [heroBadge, setHeroBadge] = useState('Nouvelle Collection 2026 • DoArt Studio');
+
+  // Hero image upload states (Storage bucket 'products', path: settings/hero/)
+  const heroImageFileRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingHeroImage, setIsUploadingHeroImage] = useState(false);
+  const [heroImageUploadError, setHeroImageUploadError] = useState<string | null>(null);
+  const [heroImageUploadSuccess, setHeroImageUploadSuccess] = useState<string | null>(null);
+
+  // Hero card image upload states (Storage bucket 'products', path: settings/featured-card/)
+  const heroCardImageFileRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingHeroCardImage, setIsUploadingHeroCardImage] = useState(false);
+  const [heroCardImageUploadError, setHeroCardImageUploadError] = useState<string | null>(null);
+  const [heroCardImageUploadSuccess, setHeroCardImageUploadSuccess] = useState<string | null>(null);
 
   const isConnected = isSupabaseConnected();
 
@@ -310,6 +324,148 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       setHeroCardOriginalPrice(p.discount_price ? `${p.price} DH` : '');
       if (p.images && p.images[0]) {
         setHeroCardImage(p.images[0]);
+      }
+    }
+  };
+
+  // Upload Main Hero Image to Supabase Storage ('products', folder 'settings/hero/')
+  const handleUploadHeroImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      setHeroImageUploadError('Format non supporté. Veuillez sélectionner une image JPG, PNG ou WEBP.');
+      if (heroImageFileRef.current) heroImageFileRef.current.value = '';
+      return;
+    }
+
+    setHeroImageUploadError(null);
+    setHeroImageUploadSuccess(null);
+    setIsUploadingHeroImage(true);
+
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const cleanBase = file.name
+        .replace(/\.[^/.]+$/, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .slice(0, 30);
+      const fileName = `settings/hero/${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${cleanBase || 'hero'}.${ext}`;
+
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: uploadData, error: upErr } = await supabase.storage
+          .from('products')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+
+        if (upErr) {
+          throw new Error(`Échec du téléversement : ${upErr.message}`);
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from('products')
+          .getPublicUrl(uploadData.path);
+
+        if (publicUrlData?.publicUrl) {
+          setHeroImage(publicUrlData.publicUrl);
+          setHeroImageUploadSuccess('Grande photo du Hero importée avec succès !');
+          setTimeout(() => setHeroImageUploadSuccess(null), 4000);
+        }
+      } else {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        setHeroImage(dataUrl);
+        setHeroImageUploadSuccess('Photo chargée en mode aperçu !');
+        setTimeout(() => setHeroImageUploadSuccess(null), 4000);
+      }
+    } catch (err: unknown) {
+      console.error('Erreur import hero_image:', err);
+      setHeroImageUploadError(
+        err instanceof Error ? err.message : 'Erreur lors du téléversement de la photo du Hero.'
+      );
+    } finally {
+      setIsUploadingHeroImage(false);
+      if (heroImageFileRef.current) {
+        heroImageFileRef.current.value = '';
+      }
+    }
+  };
+
+  // Upload Hero Card Image to Supabase Storage ('products', folder 'settings/featured-card/')
+  const handleUploadHeroCardImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      setHeroCardImageUploadError('Format non supporté. Veuillez sélectionner une image JPG, PNG ou WEBP.');
+      if (heroCardImageFileRef.current) heroCardImageFileRef.current.value = '';
+      return;
+    }
+
+    setHeroCardImageUploadError(null);
+    setHeroCardImageUploadSuccess(null);
+    setIsUploadingHeroCardImage(true);
+
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const cleanBase = file.name
+        .replace(/\.[^/.]+$/, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .slice(0, 30);
+      const fileName = `settings/featured-card/${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${cleanBase || 'card'}.${ext}`;
+
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: uploadData, error: upErr } = await supabase.storage
+          .from('products')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+
+        if (upErr) {
+          throw new Error(`Échec du téléversement : ${upErr.message}`);
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from('products')
+          .getPublicUrl(uploadData.path);
+
+        if (publicUrlData?.publicUrl) {
+          setHeroCardImage(publicUrlData.publicUrl);
+          setHeroCardImageUploadSuccess('Miniature de la carte importée avec succès !');
+          setTimeout(() => setHeroCardImageUploadSuccess(null), 4000);
+        }
+      } else {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        setHeroCardImage(dataUrl);
+        setHeroCardImageUploadSuccess('Miniature chargée en mode aperçu !');
+        setTimeout(() => setHeroCardImageUploadSuccess(null), 4000);
+      }
+    } catch (err: unknown) {
+      console.error('Erreur import hero_card_image:', err);
+      setHeroCardImageUploadError(
+        err instanceof Error ? err.message : 'Erreur lors du téléversement de la miniature.'
+      );
+    } finally {
+      setIsUploadingHeroCardImage(false);
+      if (heroCardImageFileRef.current) {
+        heroCardImageFileRef.current.value = '';
       }
     }
   };
@@ -1132,34 +1288,116 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   {/* Left Column: Form Inputs */}
                   <div className="lg:col-span-7 space-y-4 text-xs">
                     {/* 1. Main Hero Image */}
-                    <div className="bg-gray-50 p-3.5 border border-gray-200 rounded-xs space-y-2">
-                      <label className="font-bold uppercase tracking-wider text-gray-800 block">
-                        Grande Photo du Hero (Modèle) <span className="text-[#CF7644]">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={heroImage}
-                        onChange={(e) => setHeroImage(e.target.value)}
-                        placeholder="URL web ou /images/banners/nom.jpg"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-xs bg-white focus:outline-none focus:border-[#CF7644]"
-                      />
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-gray-500">
-                        <span>Raccourcis :</span>
-                        <button
-                          type="button"
-                          onClick={() => setHeroImage('/images/banners/')}
-                          className="bg-white border px-1.5 py-0.5 rounded text-[#CF7644] font-mono hover:bg-gray-100"
-                        >
-                          + /images/banners/
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setHeroImage('/images/products/')}
-                          className="bg-white border px-1.5 py-0.5 rounded text-[#CF7644] font-mono hover:bg-gray-100"
-                        >
-                          + /images/products/
-                        </button>
+                    <div className="bg-gray-50 p-3.5 border border-gray-200 rounded-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold uppercase tracking-wider text-gray-800 block">
+                          Grande Photo du Hero (Modèle) <span className="text-[#CF7644]">*</span>
+                        </label>
+                        <span className="text-[10px] text-gray-500 font-mono">
+                          settings/hero/
+                        </span>
                       </div>
+
+                      {/* Téléversement direct depuis l'ordinateur vers Supabase Storage 'products' */}
+                      <div className="p-3 bg-white border border-dashed border-[#F1D7C5] rounded-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <input
+                          ref={heroImageFileRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/jpg"
+                          onChange={handleUploadHeroImage}
+                          className="hidden"
+                          id="hero-image-file-input"
+                          disabled={isUploadingHeroImage}
+                        />
+                        <div className="space-y-0.5 text-center sm:text-left">
+                          <span className="text-xs font-semibold text-gray-800 flex items-center justify-center sm:justify-start gap-1.5">
+                            <Upload className="w-3.5 h-3.5 text-[#CF7644]" />
+                            <span>Importer depuis votre ordinateur</span>
+                          </span>
+                          <p className="text-[11px] text-gray-500">
+                            JPG, PNG, WEBP • Stockage dans <code className="text-[#CF7644] font-mono font-bold">products/settings/hero/</code>
+                          </p>
+                        </div>
+
+                        <label
+                          htmlFor="hero-image-file-input"
+                          className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xs text-xs font-bold uppercase tracking-wider text-white shadow-xs cursor-pointer transition-colors shrink-0 ${
+                            isUploadingHeroImage
+                              ? 'bg-gray-400 cursor-not-allowed'
+                              : 'bg-[#CF7644] hover:bg-[#b56133]'
+                          }`}
+                        >
+                          {isUploadingHeroImage ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Téléversement...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>Importer depuis mon ordinateur</span>
+                            </>
+                          )}
+                        </label>
+                      </div>
+
+                      {/* Feedback upload */}
+                      {heroImageUploadSuccess && (
+                        <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 text-green-700 text-xs rounded-xs">
+                          <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                          <span>{heroImageUploadSuccess}</span>
+                        </div>
+                      )}
+                      {heroImageUploadError && (
+                        <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xs">
+                          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                          <span>{heroImageUploadError}</span>
+                        </div>
+                      )}
+
+                      {/* Saisie manuelle par URL web ou chemin local */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] text-gray-600 font-semibold block">
+                          Ou saisir directement une URL / chemin :
+                        </label>
+                        <input
+                          type="text"
+                          value={heroImage}
+                          onChange={(e) => setHeroImage(e.target.value)}
+                          placeholder="URL web (https://...) ou chemin (/images/banners/nom.jpg)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xs bg-white focus:outline-none focus:border-[#CF7644] text-xs"
+                        />
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px] text-gray-500">
+                          <span>Raccourcis :</span>
+                          <button
+                            type="button"
+                            onClick={() => setHeroImage('/images/banners/')}
+                            className="bg-white border px-1.5 py-0.5 rounded text-[#CF7644] font-mono hover:bg-gray-100"
+                          >
+                            + /images/banners/
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHeroImage('/images/products/')}
+                            className="bg-white border px-1.5 py-0.5 rounded text-[#CF7644] font-mono hover:bg-gray-100"
+                          >
+                            + /images/products/
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Aperçu immédiat sous le champ */}
+                      {heroImage && (
+                        <div className="pt-1 flex items-center gap-3 p-2 bg-white border border-gray-200 rounded-xs">
+                          <div className="w-10 h-14 rounded-xs overflow-hidden border border-gray-200 shrink-0 bg-gray-100 shadow-2xs">
+                            <img src={heroImage} alt="Hero photo" className="w-full h-full object-cover" />
+                          </div>
+                          <div className="min-w-0 text-[11px]">
+                            <span className="font-semibold text-gray-700 block truncate">Photo actuelle sélectionnée :</span>
+                            <span className="font-mono text-gray-500 text-[10px] truncate block max-w-xs">{heroImage}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* 2. Top-Right Floating Badge */}
@@ -1265,17 +1503,96 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         </div>
                       </div>
 
-                      <div>
-                        <label className="text-[11px] text-gray-600 font-semibold block mb-1">
-                          Miniature de la carte (URL ou /images/...)
-                        </label>
-                        <input
-                          type="text"
-                          value={heroCardImage}
-                          onChange={(e) => setHeroCardImage(e.target.value)}
-                          placeholder="URL ou /images/products/..."
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white"
-                        />
+                      <div className="space-y-2 pt-2 border-t border-gray-200">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] text-gray-700 font-bold block">
+                            Miniature de la carte produit
+                          </label>
+                          <span className="text-[10px] text-gray-400 font-mono">
+                            settings/featured-card/
+                          </span>
+                        </div>
+
+                        {/* Import direct depuis l'ordinateur vers Supabase Storage 'products' */}
+                        <div className="p-2.5 bg-white border border-dashed border-[#F1D7C5] rounded-xs flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                          <input
+                            ref={heroCardImageFileRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/jpg"
+                            onChange={handleUploadHeroCardImage}
+                            className="hidden"
+                            id="hero-card-image-file-input"
+                            disabled={isUploadingHeroCardImage}
+                          />
+                          <div className="space-y-0.5 text-center sm:text-left">
+                            <span className="text-[11px] font-semibold text-gray-800 flex items-center justify-center sm:justify-start gap-1">
+                              <Upload className="w-3.5 h-3.5 text-[#CF7644]" />
+                              <span>Importer depuis votre ordinateur</span>
+                            </span>
+                            <p className="text-[10px] text-gray-500">
+                              JPG, PNG, WEBP • Stockage dans <code className="text-[#CF7644] font-mono font-bold">products/settings/featured-card/</code>
+                            </p>
+                          </div>
+
+                          <label
+                            htmlFor="hero-card-image-file-input"
+                            className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xs text-[11px] font-bold uppercase tracking-wider text-white shadow-xs cursor-pointer transition-colors shrink-0 ${
+                              isUploadingHeroCardImage
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-[#CF7644] hover:bg-[#b56133]'
+                            }`}
+                          >
+                            {isUploadingHeroCardImage ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span>Téléversement...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-3 h-3" />
+                                <span>Importer depuis mon ordinateur</span>
+                              </>
+                            )}
+                          </label>
+                        </div>
+
+                        {/* Feedback upload carte */}
+                        {heroCardImageUploadSuccess && (
+                          <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 text-green-700 text-xs rounded-xs">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                            <span>{heroCardImageUploadSuccess}</span>
+                          </div>
+                        )}
+                        {heroCardImageUploadError && (
+                          <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xs">
+                            <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                            <span>{heroCardImageUploadError}</span>
+                          </div>
+                        )}
+
+                        {/* Saisie manuelle par URL */}
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">
+                            Ou saisir directement l'URL :
+                          </label>
+                          <input
+                            type="text"
+                            value={heroCardImage}
+                            onChange={(e) => setHeroCardImage(e.target.value)}
+                            placeholder="URL web (https://...) ou /images/products/..."
+                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-xs bg-white text-xs focus:outline-none focus:border-[#CF7644]"
+                          />
+                        </div>
+
+                        {/* Aperçu immédiat miniature */}
+                        {heroCardImage && (
+                          <div className="flex items-center gap-2 p-1.5 bg-white border border-gray-200 rounded-xs">
+                            <div className="w-7 h-9 rounded-2xs overflow-hidden border border-gray-200 shrink-0 bg-gray-100 shadow-2xs">
+                              <img src={heroCardImage} alt="Card preview" className="w-full h-full object-cover" />
+                            </div>
+                            <span className="font-mono text-gray-500 text-[10px] truncate max-w-xs">{heroCardImage}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
