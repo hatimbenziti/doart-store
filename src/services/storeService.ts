@@ -244,8 +244,13 @@ export async function saveProduct(
     updated_at: new Date().toISOString(),
   };
 
+  const storedVariants: ProductVariant[] = JSON.parse(
+    localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
+  );
+
   const finalVariants: ProductVariant[] = variantsData.map((v, i) => {
     const varId = v.id && isValidUUID(v.id) ? v.id : generateUUID();
+    const existing = storedVariants.find((sv) => sv.id === varId);
     return {
       id: varId,
       product_id: id,
@@ -253,6 +258,7 @@ export async function saveProduct(
       color_name: v.color_name || 'Standard',
       color_hex: v.color_hex || '#000000',
       stock_quantity: Number(v.stock_quantity) || 0,
+      expected_stock: typeof v.expected_stock === 'number' ? v.expected_stock : (existing ? existing.stock_quantity : undefined),
       sku: v.sku || `DOA-${slug.toUpperCase().slice(0, 4)}-${v.size}-${i + 1}`,
       created_at: v.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -261,42 +267,38 @@ export async function saveProduct(
 
   if (supabase) {
     try {
-      const { error: prodErr } = await supabase.from('products').upsert({
-        id: productRecord.id,
-        name: productRecord.name,
-        slug: productRecord.slug,
-        description: productRecord.description,
-        price: productRecord.price,
-        discount_price: productRecord.discount_price,
-        category_id: productRecord.category_id || null,
-        images: productRecord.images,
-        is_active: productRecord.is_active,
-        is_featured: productRecord.is_featured,
-        is_new: productRecord.is_new,
-        updated_at: new Date().toISOString(),
+      const { data: rpcResp, error: rpcErr } = await supabase.rpc('admin_save_product_with_variants', {
+        p_product: {
+          id: productRecord.id,
+          name: productRecord.name,
+          slug: productRecord.slug,
+          description: productRecord.description,
+          price: productRecord.price,
+          discount_price: productRecord.discount_price,
+          category_id: productRecord.category_id || null,
+          images: productRecord.images,
+          is_active: productRecord.is_active,
+          is_featured: productRecord.is_featured,
+          is_new: productRecord.is_new,
+        },
+        p_variants: finalVariants.map((v) => ({
+          id: v.id,
+          size: v.size,
+          color_name: v.color_name,
+          color_hex: v.color_hex,
+          stock_quantity: v.stock_quantity,
+          expected_stock: typeof v.expected_stock === 'number' ? v.expected_stock : undefined,
+          sku: v.sku,
+        })),
       });
 
-      if (prodErr) throw prodErr;
+      if (rpcErr) throw rpcErr;
 
-      // Clean old variants and insert updated matrix with valid UUIDs
-      await supabase.from('product_variants').delete().eq('product_id', id);
-      if (finalVariants.length > 0) {
-        const { error: varErr } = await supabase.from('product_variants').insert(
-          finalVariants.map((v) => ({
-            id: v.id,
-            product_id: v.product_id,
-            size: v.size,
-            color_name: v.color_name,
-            color_hex: v.color_hex,
-            stock_quantity: v.stock_quantity,
-            sku: v.sku,
-            updated_at: new Date().toISOString(),
-          }))
-        );
-        if (varErr) throw varErr;
+      if (rpcResp?.variants && Array.isArray(rpcResp.variants)) {
+        finalVariants.splice(0, finalVariants.length, ...rpcResp.variants);
       }
     } catch (err) {
-      console.error('Supabase product save error:', err);
+      console.error('Supabase admin_save_product_with_variants error:', err);
     }
   }
 
@@ -327,7 +329,16 @@ export async function saveProduct(
 export async function deleteProduct(id: string): Promise<void> {
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('products').delete().eq('id', id);
+    try {
+      const { error } = await supabase.rpc('admin_archive_product', {
+        p_product_id: id,
+      });
+      if (error) {
+        console.error('Supabase admin_archive_product error:', error);
+      }
+    } catch (err) {
+      console.error('Supabase archive product error:', err);
+    }
   }
 
   const prods: Product[] = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.PRODUCTS) || '[]');
@@ -386,7 +397,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
       p_address: params.address.trim(),
       p_notes: params.notes?.trim() || '',
       p_items: itemsPayload,
-      p_status: 'Pending WhatsApp Confirmation',
+      p_status: 'Confirmed',
     });
 
     if (rpcErr) {
@@ -394,9 +405,10 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
       throw new Error(rpcErr.message || 'Erreur lors de la création de la commande sur Supabase.');
     }
 
-    if (rpcData && rpcData.id) {
+    if (rpcData && (rpcData.id || rpcData.order_id)) {
+      const orderId = rpcData.id || rpcData.order_id;
       const confirmedOrder: Order = {
-        id: rpcData.id,
+        id: orderId,
         order_reference: rpcData.order_reference,
         customer_name: rpcData.customer_name,
         customer_phone: rpcData.customer_phone,
@@ -405,7 +417,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
         notes: rpcData.notes,
         subtotal: Number(rpcData.subtotal),
         total: Number(rpcData.total),
-        status: (rpcData.status as OrderStatus) || 'Pending WhatsApp Confirmation',
+        status: (rpcData.status as OrderStatus) || 'Confirmed',
         payment_method: 'COD',
         created_at: rpcData.created_at,
         items: rpcData.items || params.items.map((it) => ({
@@ -505,45 +517,41 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
   const orders = await getOrders();
   const order = orders.find((o) => o.id === orderId);
 
-  // If cancelling order, restore stock
-  if (order && newStatus === 'Cancelled' && order.status !== 'Cancelled') {
-    // 1. Try Supabase cancellation RPC first
-    if (supabase) {
-      try {
-        await supabase.rpc('cancel_order_and_restore_stock', { p_order_id: orderId });
-      } catch (e) {
-        console.warn('RPC cancel_order_and_restore_stock failed, falling back to manual restore:', e);
+  if (supabase) {
+    if (newStatus === 'Cancelled') {
+      const { error: cancelErr } = await supabase.rpc('cancel_order_and_restore_stock', {
+        p_order_id: orderId,
+      });
+      if (cancelErr) {
+        throw new Error(`Erreur lors de l'annulation de la commande: ${cancelErr.message}`);
+      }
+    } else {
+      const { error: statErr } = await supabase.rpc('admin_update_order_status', {
+        p_order_id: orderId,
+        p_status: newStatus,
+      });
+      if (statErr) {
+        throw new Error(`Erreur lors de la mise à jour du statut: ${statErr.message}`);
       }
     }
+  }
 
-    // 2. Restore local stock
-    const allVariants: ProductVariant[] = JSON.parse(
-      localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
-    );
-    for (const item of order.items || []) {
-      const v = allVariants.find((varItem) => varItem.id === item.variant_id);
-      if (v) {
-        v.stock_quantity += item.quantity;
-      }
-      if (supabase && isValidUUID(item.variant_id)) {
-        try {
-          await supabase.rpc('restore_variant_stock', {
-            var_id: item.variant_id,
-            qty: item.quantity,
-          });
-        } catch {
-          // ignore
+  // Local state update
+  if (order) {
+    if (newStatus === 'Cancelled' && order.status !== 'Cancelled') {
+      // If offline / preview mode, restore stock locally
+      const allVariants: ProductVariant[] = JSON.parse(
+        localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
+      );
+      for (const item of order.items || []) {
+        const v = allVariants.find((varItem) => varItem.id === item.variant_id);
+        if (v) {
+          v.stock_quantity += item.quantity;
         }
       }
+      localStorage.setItem(LOCAL_STORAGE_KEYS.VARIANTS, JSON.stringify(allVariants));
     }
-    localStorage.setItem(LOCAL_STORAGE_KEYS.VARIANTS, JSON.stringify(allVariants));
-  }
 
-  if (supabase) {
-    await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
-  }
-
-  if (order) {
     order.status = newStatus;
     localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(orders));
   }
@@ -555,7 +563,17 @@ export async function updateOrderCustomer(
 ): Promise<void> {
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('orders').update(updates).eq('id', orderId);
+    const { error } = await supabase.rpc('admin_update_order_customer', {
+      p_order_id: orderId,
+      p_customer_name: updates.customer_name,
+      p_customer_phone: updates.customer_phone,
+      p_city: updates.city,
+      p_address: updates.address,
+      p_notes: updates.notes || '',
+    });
+    if (error) {
+      throw new Error(`Erreur lors de la mise à jour des coordonnées client: ${error.message}`);
+    }
   }
 
   const orders = await getOrders();
@@ -598,6 +616,212 @@ export async function getStoreSettings(): Promise<StoreSettings> {
   return INITIAL_SETTINGS;
 }
 
+export interface BatchVariantStockUpdate {
+  variant_id: string;
+  new_stock: number;
+  expected_stock: number;
+}
+
+/**
+ * Synchronisation groupée atomique du stock des variantes.
+ * Exige une confirmation stricte et complète du serveur avant toute mise à jour du cache local.
+ */
+export async function batchUpdateVariantStock(
+  updates: BatchVariantStockUpdate[]
+): Promise<{ success: boolean; variants: { variant_id: string; stock_quantity: number }[] }> {
+  if (!updates || updates.length === 0) {
+    return { success: true, variants: [] };
+  }
+
+  // Validation préalable des données demandées
+  for (const item of updates) {
+    if (!item.variant_id || !isValidUUID(item.variant_id)) {
+      throw new Error(`Identifiant de variante invalide: ${item.variant_id}`);
+    }
+    if (typeof item.new_stock !== 'number' || !Number.isInteger(item.new_stock) || item.new_stock < 0) {
+      throw new Error(
+        `La quantité de stock doit être un entier supérieur ou égal à zéro pour la variante ${item.variant_id}.`
+      );
+    }
+    if (typeof item.expected_stock !== 'number' || !Number.isInteger(item.expected_stock) || item.expected_stock < 0) {
+      throw new Error(
+        `Le paramètre expected_stock est obligatoire et doit être un entier supérieur ou égal à zéro pour la variante ${item.variant_id}.`
+      );
+    }
+  }
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const payload = updates.map((u) => ({
+      variant_id: u.variant_id,
+      new_stock: u.new_stock,
+      expected_stock: u.expected_stock,
+    }));
+
+    const { data, error } = await supabase.rpc('admin_batch_update_variant_stock', {
+      p_updates: payload,
+    });
+
+    if (error) {
+      throw new Error(`Échec de la mise à jour groupée du stock: ${error.message}`);
+    }
+
+    // Exiger une réponse success === true
+    if (!data || data.success !== true || !Array.isArray(data.variants)) {
+      throw new Error('Réponse invalide ou échec de la procédure Supabase admin_batch_update_variant_stock.');
+    }
+
+    // Exiger que rpcResult.variants contienne exactement toutes les variantes demandées
+    if (data.variants.length !== updates.length) {
+      throw new Error(
+        `Réponse incomplète: ${data.variants.length} variante(s) reçue(s) sur ${updates.length} demandée(s).`
+      );
+    }
+
+    const verifiedStockMap = new Map<string, number>();
+
+    // Vérifier chaque variant_id et chaque stock_quantity (entier >= 0)
+    for (const v of data.variants) {
+      if (!v || typeof v.variant_id !== 'string' || !isValidUUID(v.variant_id)) {
+        throw new Error('Identifiant de variante invalide retourné par Supabase.');
+      }
+      if (typeof v.stock_quantity !== 'number' || !Number.isInteger(v.stock_quantity) || v.stock_quantity < 0) {
+        throw new Error(`Quantité de stock invalide retournée par Supabase pour la variante ${v.variant_id}.`);
+      }
+      verifiedStockMap.set(v.variant_id, v.stock_quantity);
+    }
+
+    // Vérifier que chaque variante demandée est bien présente dans la réponse confirmée
+    for (const item of updates) {
+      if (!verifiedStockMap.has(item.variant_id)) {
+        throw new Error(
+          `La variante demandée ${item.variant_id} est absente de la confirmation retournée par Supabase.`
+        );
+      }
+    }
+
+    // Ne synchroniser le cache local qu'avec les valeurs réellement retournées par Supabase
+    // (AUCUN fallback ?? item.new_stock)
+    const allVariants: ProductVariant[] = JSON.parse(
+      localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
+    );
+    for (const [varId, confirmedStock] of verifiedStockMap.entries()) {
+      const found = allVariants.find((v) => v.id === varId);
+      if (found) {
+        found.stock_quantity = confirmedStock;
+        found.updated_at = new Date().toISOString();
+      }
+    }
+    localStorage.setItem(LOCAL_STORAGE_KEYS.VARIANTS, JSON.stringify(allVariants));
+
+    return {
+      success: true,
+      variants: data.variants.map((v: { variant_id: string; stock_quantity: number }) => ({
+        variant_id: v.variant_id,
+        stock_quantity: v.stock_quantity,
+      })),
+    };
+  }
+
+  // Fallback mode hors-ligne / prévisualisation locale
+  const allVariants: ProductVariant[] = JSON.parse(
+    localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
+  );
+  const localConfirmedList: { variant_id: string; stock_quantity: number }[] = [];
+
+  for (const item of updates) {
+    const found = allVariants.find((v) => v.id === item.variant_id);
+    if (found) {
+      if (typeof item.expected_stock === 'number' && found.stock_quantity !== item.expected_stock) {
+        throw new Error(`Conflit de concurrence local pour la variante ${item.variant_id}`);
+      }
+      found.stock_quantity = item.new_stock;
+      found.updated_at = new Date().toISOString();
+      localConfirmedList.push({ variant_id: item.variant_id, stock_quantity: item.new_stock });
+    }
+  }
+
+  localStorage.setItem(LOCAL_STORAGE_KEYS.VARIANTS, JSON.stringify(allVariants));
+  return { success: true, variants: localConfirmedList };
+}
+
+/**
+ * Met à jour le stock d'une variante individuelle avec contrôle optimiste expected_stock
+ */
+export async function updateVariantStock(
+  variantId: string,
+  newStock: number,
+  expectedStock: number
+): Promise<{ success: boolean; variant_id: string; previous_stock?: number; new_stock: number }> {
+  if (!isValidUUID(variantId)) {
+    throw new Error(`Identifiant de variante invalide: ${variantId}`);
+  }
+  if (!Number.isInteger(newStock) || newStock < 0) {
+    throw new Error('La quantité de stock doit être un entier supérieur ou égal à zéro.');
+  }
+  if (typeof expectedStock !== 'number' || !Number.isInteger(expectedStock) || expectedStock < 0) {
+    throw new Error('Le paramètre expectedStock est obligatoire et doit être un entier supérieur ou égal à zéro.');
+  }
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const { data, error } = await supabase.rpc('admin_update_variant_stock', {
+      p_variant_id: variantId,
+      p_new_stock: newStock,
+      p_expected_stock: expectedStock,
+    });
+
+    if (error) {
+      throw new Error(`Échec de la mise à jour du stock: ${error.message}`);
+    }
+
+    if (!data || data.success !== true || typeof data.new_stock !== 'number') {
+      throw new Error('Réponse invalide du serveur lors de la mise à jour du stock.');
+    }
+
+    // Mise à jour du cache local uniquement avec la valeur confirmée par Supabase
+    const allVariants: ProductVariant[] = JSON.parse(
+      localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
+    );
+    const found = allVariants.find((v) => v.id === variantId);
+    if (found) {
+      found.stock_quantity = data.new_stock;
+      found.updated_at = new Date().toISOString();
+      localStorage.setItem(LOCAL_STORAGE_KEYS.VARIANTS, JSON.stringify(allVariants));
+    }
+
+    return {
+      success: true,
+      variant_id: variantId,
+      previous_stock: data.previous_stock,
+      new_stock: data.new_stock,
+    };
+  }
+
+  // Fallback local
+  const allVariants: ProductVariant[] = JSON.parse(
+    localStorage.getItem(LOCAL_STORAGE_KEYS.VARIANTS) || '[]'
+  );
+  const found = allVariants.find((v) => v.id === variantId);
+  if (!found) {
+    throw new Error(`Variante introuvable: ${variantId}`);
+  }
+  if (typeof expectedStock === 'number' && found.stock_quantity !== expectedStock) {
+    throw new Error(`Conflit de stock local pour la variante ${variantId}`);
+  }
+  const prev = found.stock_quantity;
+  found.stock_quantity = newStock;
+  found.updated_at = new Date().toISOString();
+  localStorage.setItem(LOCAL_STORAGE_KEYS.VARIANTS, JSON.stringify(allVariants));
+
+  return {
+    success: true,
+    variant_id: variantId,
+    previous_stock: prev,
+    new_stock: newStock,
+  };
+}
+
 export async function updateStoreSettings(settings: Partial<StoreSettings>): Promise<StoreSettings> {
   const current = await getStoreSettings();
   const updated: StoreSettings = {
@@ -608,8 +832,8 @@ export async function updateStoreSettings(settings: Partial<StoreSettings>): Pro
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('store_settings').upsert({
-      id: updated.id,
+    // Mise à jour ciblée sur l'enregistrement singleton existant
+    const payload = {
       store_name: updated.store_name,
       whatsapp_number: updated.whatsapp_number,
       instagram_url: updated.instagram_url,
@@ -628,7 +852,21 @@ export async function updateStoreSettings(settings: Partial<StoreSettings>): Pro
       hero_card_image: updated.hero_card_image,
       hero_featured_product_id: updated.hero_featured_product_id,
       updated_at: new Date().toISOString(),
-    });
+    };
+
+    if (current.id && isValidUUID(current.id)) {
+      const { error: updateErr } = await supabase
+        .from('store_settings')
+        .update(payload)
+        .eq('id', current.id);
+
+      if (updateErr) {
+        console.warn('Update store_settings by ID error, attempting singleton fallback:', updateErr);
+        await supabase.from('store_settings').update(payload).eq('is_singleton', true);
+      }
+    } else {
+      await supabase.from('store_settings').update(payload).eq('is_singleton', true);
+    }
   }
 
   localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(updated));

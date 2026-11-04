@@ -13,7 +13,9 @@ export interface ProductVariant {
   color_name: string;
   color_hex: string;
   stock_quantity: number;
+  expected_stock?: number;
   sku?: string;
+  is_active?: boolean;
   created_at?: string;
   updated_at?: string;
 }

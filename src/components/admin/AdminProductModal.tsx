@@ -235,6 +235,7 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({
             color_name: col.name,
             color_hex: col.hex,
             stock_quantity: stock,
+            expected_stock: existingVar ? existingVar.stock_quantity : undefined,
             sku: existingVar?.sku || `DOA-${sz}-${col.name.slice(0, 3).toUpperCase()}`,
           });
         });
